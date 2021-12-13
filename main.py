@@ -9,24 +9,26 @@ from sklearn.preprocessing import StandardScaler
 
 
 if __name__ == '__main__':
-    superposition = True
-    first_average = 'average'     # show results on 'first' task or the 'average' results until current task
+    superposition = False
+    first_average = 'first'     # show results on 'first' task or the 'average' results until current task
 
-    use_MLP = True      # if True use MLP, else use Transformer
+    use_MLP = False      # if True use MLP, else use Transformer
     input_size = 32
     num_heads = 4
     num_layers = 1
     dim_feedforward = 1024
     num_classes = 2
     standardize_input = False
+    element_wise = True     # if True, parameters in self attention are superimposed element-wise
 
     batch_size = 128
     num_runs = 3
-    num_tasks = 3
-    num_epochs = 50 if use_MLP else 10
+    num_tasks = 6   # todo
+    # num_epochs = 50 if use_MLP else 10
+    num_epochs = 10
     learning_rate = 0.001
 
-    # # save X, y, mask for all three datasets
+    # # save X, y, mask for all 6 datasets
     # X, y, mask = preprocess_hate_speech('datasets/hate_speech.csv')
     # torch.save(X, 'Word2Vec_embeddings/X_hate_speech.pt')
     # torch.save(y, 'Word2Vec_embeddings/y_hate_speech.pt')
@@ -41,6 +43,22 @@ if __name__ == '__main__':
     # torch.save(X, 'Word2Vec_embeddings/X_sms_spam.pt')
     # torch.save(y, 'Word2Vec_embeddings/y_sms_spam.pt')
     # torch.save(mask, 'Word2Vec_embeddings/mask_sms_spam.pt')
+    #
+    # X, y, mask = preprocess_sentiment_analysis('datasets/sentiment_analysis/')
+    # torch.save(X, 'Word2Vec_embeddings/X_sentiment_analysis_2.pt')
+    # torch.save(y, 'Word2Vec_embeddings/y_sentiment_analysis_2.pt')
+    # torch.save(mask, 'Word2Vec_embeddings/mask_sentiment_analysis_2.pt')
+    #
+    # X, y, mask = preprocess_clickbait('datasets/clickbait/')
+    # torch.save(X, 'Word2Vec_embeddings/X_clickbait.pt')
+    # torch.save(y, 'Word2Vec_embeddings/y_clickbait.pt')
+    # torch.save(mask, 'Word2Vec_embeddings/mask_clickbait.pt')
+    #
+    # # X is too big to be put into tensor (memory error, size of more than 6 GB)
+    # X, y, mask = preprocess_humor_detection('datasets/humor_detection/')
+    # torch.save(X, 'Word2Vec_embeddings/X_humor_detection.pt')
+    # torch.save(y, 'Word2Vec_embeddings/y_humor_detection.pt')
+    # torch.save(mask, 'Word2Vec_embeddings/mask_humor_detection.pt')
 
     # model = Transformer(input_size, num_heads, num_layers, dim_feedforward, num_classes).cuda()
     # x = model(X[:64].cuda(), mask[:64].cuda())
@@ -69,7 +87,7 @@ if __name__ == '__main__':
             model = MyTransformer(input_size, num_heads, num_layers, dim_feedforward, num_classes).to(device)
 
         all_tasks_test_data = []
-        contexts, layer_dimension = create_context_vectors(model, num_tasks)
+        contexts, layer_dimension = create_context_vectors(model, num_tasks, element_wise)
 
         for t in range(num_tasks):
             print('- Task %d -' % (t + 1))
@@ -99,6 +117,18 @@ if __name__ == '__main__':
                 X = torch.load('Word2Vec_embeddings/X_sms_spam.pt').float()
                 y = torch.load('Word2Vec_embeddings/y_sms_spam.pt')
                 mask = torch.load('Word2Vec_embeddings/mask_sms_spam.pt').float()
+            elif t == 3:
+                X = torch.load('Word2Vec_embeddings/X_sentiment_analysis_2.pt').float()
+                y = torch.load('Word2Vec_embeddings/y_sentiment_analysis_2.pt')
+                mask = torch.load('Word2Vec_embeddings/mask_sentiment_analysis_2.pt').float()
+            elif t == 4:
+                X = torch.load('Word2Vec_embeddings/X_clickbait.pt').float()
+                y = torch.load('Word2Vec_embeddings/y_clickbait.pt')
+                mask = torch.load('Word2Vec_embeddings/mask_clickbait.pt').float()
+            elif t == 5:
+                X = torch.load('Word2Vec_embeddings/X_humor_detection.pt').float()
+                y = torch.load('Word2Vec_embeddings/y_humor_detection.pt')
+                mask = torch.load('Word2Vec_embeddings/mask_humor_detection.pt').float()
 
             if standardize_input:
                 for i in range(X.shape[0]):
@@ -148,10 +178,9 @@ if __name__ == '__main__':
                     loss.backward()
                     optimizer.step()
 
-                train_acc, train_auroc, train_auprc = get_stats(train_outputs, torch.cat(permuted_y, dim=0))
-
-                print("Epoch: %d --- train acc: %.2f, train AUROC: %.2f, train AUPRC: %.2f" %
-                      (epoch, train_acc * 100, train_auroc * 100, train_auprc * 100))
+                # train_acc, train_auroc, train_auprc = get_stats(train_outputs, torch.cat(permuted_y, dim=0))
+                # print("Epoch: %d --- train acc: %.2f, train AUROC: %.2f, train AUPRC: %.2f" %
+                #       (epoch, train_acc * 100, train_auroc * 100, train_auprc * 100))
 
                 # check validation set
                 model.eval()
@@ -180,7 +209,6 @@ if __name__ == '__main__':
                         best_auroc_val = val_auroc
                         torch.save(model.state_dict(), 'models/model_best.pt')
 
-                # todo
                 # track results with or without superposition
                 acc_e, auroc_e, auprc_e = evaluate_results(model, contexts, layer_dimension, all_tasks_test_data,
                                                            superposition, t, first_average, use_MLP, batch_size)
@@ -190,7 +218,7 @@ if __name__ == '__main__':
                 auprc_epoch[r, (t * num_epochs) + epoch] = auprc_e
 
             # check test set
-            model.load_state_dict(torch.load('models/model_best.pt'))
+            model.load_state_dict(torch.load('models/model_best.pt'))   # todo
             model.eval()
             with torch.no_grad():
                 test_outputs = []
@@ -234,6 +262,12 @@ if __name__ == '__main__':
             s = 'IMDB sentiment analysis'
         elif t == 2:
             s = 'SMS spam'
+        elif t == 3:
+            s = 'Amazon, Yelp sentiment analysis'
+        elif t == 4:
+            s = 'Clickbait'
+        elif t == 5:
+            s = 'Humor detection'
 
         print('------------------------------------------')
         print('%s - Accuracy = %.1f +/- %.1f' % (s, mean_acc[t], std_acc[t]))
@@ -246,17 +280,23 @@ if __name__ == '__main__':
     mean_auprc, std_auprc = np.mean(auprc_epoch, axis=0), np.std(auprc_epoch, axis=0)
 
     show_only_accuracy = False
+    min_y = 30
     if show_only_accuracy:
-        plot_multiple_results([mean_acc], [std_acc], ['Accuracy'],
-                              '%s task results, %s model, %s' % (first_average, 'MLP' if use_MLP else 'Transformer',
-                                                                 'superposition' if superposition else 'no superposition'),
+        plot_multiple_results(num_tasks, num_epochs, first_average,
+                              [mean_acc], [std_acc], ['Accuracy'],
+                              '%s task results, %s model, %s, el.-wise=%s' % (first_average, 'MLP' if use_MLP else 'Transformer',
+                                                                 'superposition' if superposition else 'no superposition',
+                                                                              str(element_wise) if superposition and not use_MLP else '/'),
                               ['tab:blue'], 'Epoch', 'Accuracy (%)',
-                              [(i + 1) * num_epochs for i in range(num_tasks - 1)], 0, 100)
+                              [((i + 1) * num_epochs) - 1 for i in range(num_tasks - 1)], min_y, 100)
     else:   # show all three metrics
-        plot_multiple_results([mean_acc, mean_auroc, mean_auprc], [std_acc, std_auroc, std_auprc], ['Accuracy', 'AUROC', 'AUPRC'],
-                              '%s task results, %s model, %s' % (first_average, 'MLP' if use_MLP else 'Transformer', 'superposition' if superposition else 'no superposition'),
+        plot_multiple_results(num_tasks, num_epochs, first_average,
+                              [mean_acc, mean_auroc, mean_auprc], [std_acc, std_auroc, std_auprc], ['Accuracy', 'AUROC', 'AUPRC'],
+                              '%s task results, %s model, %s, el.-wise=%s' %
+                              (first_average, 'MLP' if use_MLP else 'Transformer', 'superposition' if superposition else 'no superposition',
+                               str(element_wise) if superposition and not use_MLP else '/'),
                               ['tab:blue', 'tab:orange', 'tab:green'], 'Epoch', 'Metric value',
-                              [(i + 1) * num_epochs for i in range(num_tasks - 1)], 0, 100)
+                              [((i + 1) * num_epochs) - 1 for i in range(num_tasks - 1)], min_y, 100)
 
 
 

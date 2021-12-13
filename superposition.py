@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import math
 from help_functions import *
 
 
@@ -16,7 +17,7 @@ def random_binary_array(size):
     return vec
 
 
-def create_context_vectors(model, num_tasks):
+def create_context_vectors(model, num_tasks, element_wise):
     """
     Create random binary context vectors for all model layers.
     Return together with layer dimension side, which is a list of 0 (first dimension taken for context size)
@@ -24,6 +25,7 @@ def create_context_vectors(model, num_tasks):
 
     :param model: torch model instance
     :param num_tasks: number of tasks
+    :param element_wise: boolean - if True, the number of context values in self attention part is the same as number of parameters
     :return: context_vectors (shape=(num_tasks-1, num of model layers)), layer_dimension (length=num of model layers)
     """
     context_vectors = []
@@ -37,9 +39,15 @@ def create_context_vectors(model, num_tasks):
                     if t == 0:
                         layer_dimension.append(1)
                 else:   # not FC layer (e.g., Wq, Wk, Wv in multi-head attention)
-                    vector_size = params.size()[0]
-                    if t == 0:
-                        layer_dimension.append(0)
+                    if element_wise:
+                        vector_size = params.size()[0] * params.size()[1]
+                        if t == 0:
+                            layer_dimension.append(2)
+                    else:
+                        vector_size = params.size()[0]
+                        if t == 0:
+                            layer_dimension.append(0)
+
                 binary_context_vector = random_binary_array(vector_size)
                 task_contexts.append(binary_context_vector)
         context_vectors.append(task_contexts)
@@ -60,12 +68,16 @@ def context_multiplication(model, contexts, layer_dimension, task_index):
     for name, params in model.named_parameters():
         if name.endswith('weight'):  # only weight, not bias
             with torch.no_grad():
-                context_matrix = torch.from_numpy(np.diag(contexts[task_index][layer_index]).astype(np.float32))
-
                 if layer_dimension[layer_index] == 0:
+                    context_matrix = torch.from_numpy(np.diag(contexts[task_index][layer_index]).astype(np.float32))
                     new_params = torch.matmul(context_matrix, params)
                 elif layer_dimension[layer_index] == 1:
+                    context_matrix = torch.from_numpy(np.diag(contexts[task_index][layer_index]).astype(np.float32))
                     new_params = torch.matmul(params, context_matrix)
+                elif layer_dimension[layer_index] == 2:    # element-wise multiplication
+                    context_matrix = torch.from_numpy(np.reshape(contexts[task_index][layer_index],
+                                                                 newshape=(params.size()[0], params.size()[1])).astype(np.float32))
+                    new_params = params * context_matrix
                 else:
                     raise ValueError('Layer index must be 0 or 1.')
 
@@ -108,7 +120,6 @@ def evaluate_results(model, contexts, layer_dimension, all_tasks_test_data, supe
                                           superposition, task_index, use_MLP, batch_size)
         else:
             raise ValueError('The value of "first_average" has to be string "first" or "average".')
-
     else:   # superposition not used
         if first_average == 'first':
             return evaluate_current_task(model, all_tasks_test_data, 0, use_MLP, batch_size)
@@ -173,8 +184,7 @@ def evaluate_tasks_average(model, all_tasks_test_data, contexts, layer_dimension
 
             # context multiplication to the previous task
             if task_i > 0:  # because we do not perform multiplication before the first task
-                context_multiplication(model, contexts, layer_dimension,
-                                       task_i - 1)  # task_i - 1, because contexts are only used between tasks
+                context_multiplication(model, contexts, layer_dimension, task_i - 1)  # task_i - 1, because contexts are only used between tasks
 
         # restore model parameters to the old ones (before context multiplication)
         for task_i in range(task_index):  # iterate across tasks forward

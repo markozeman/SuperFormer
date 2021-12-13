@@ -60,7 +60,7 @@ def prepare_key_padding_mask(tokenized_X, comment_lengths, longest_comment_size)
 
 def preprocess_hate_speech(filepath):
     """
-    Preprocess hate speech data from CSV and split them to train and test dataset.
+    Preprocess hate speech data from CSV.
     1 - hate speech, 0 – no hate speech.
 
     :param filepath: string path to the file with data
@@ -101,11 +101,11 @@ def preprocess_hate_speech(filepath):
 
 def preprocess_IMDB_reviews(filepath):
     """
-    Preprocess hate speech data from CSV and split them to train and test dataset.
+    Preprocess hate speech data from CSV.
     1 - positive sentiment, 0 – negative sentiment.
 
     :param filepath: string path to the file with data
-    :return: data in the shape of (X_train, y_train, X_test, y_test)
+    :return: data in the shape of (X, y, mask)
     """
     data = pd.read_csv(filepath)
 
@@ -142,11 +142,11 @@ def preprocess_IMDB_reviews(filepath):
 
 def preprocess_SMS_spam(filepath):
     """
-    Preprocess SMS spam data from CSV and split them to train and test dataset.
+    Preprocess SMS spam data from CSV.
     1 - spam, 0 – not spam.
 
     :param filepath: string path to the file with data
-    :return: data in the shape of (X_train, y_train, X_test, y_test)
+    :return: data in the shape of (X, y, mask)
     """
     data = pd.read_csv(filepath, encoding='latin-1')
 
@@ -180,5 +180,157 @@ def preprocess_SMS_spam(filepath):
 
     return X_tensorized, y_tensorized, key_padding_mask
 
+
+def preprocess_sentiment_analysis(filepath):
+    """
+    Preprocess sentiment analysis data from two text files.
+    1 - positive, 0 – negative.
+
+    :param filepath: string path to the folder with data
+    :return: data in the shape of (X, y, mask)
+    """
+    X = []
+    y = []
+
+    # read Amazon data
+    with open(filepath + 'amazon_cells_labelled.txt') as f:
+        lines = f.readlines()
+        for line in lines:
+            txt, label = line.split('\t')
+            X.append(txt.strip())
+            y.append(label.strip())
+
+    # read Yelp data
+    with open(filepath + 'yelp_labelled.txt') as f:
+        lines = f.readlines()
+        for line in lines:
+            txt, label = line.split('\t')
+            X.append(txt.strip())
+            y.append(label.strip())
+
+    # make target label binary integer
+    y = list(map(lambda c: [1, 0] if c == '0' else [0, 1], y))  # one-hot encode labels
+
+    bert_tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+    tokenized_X = [bert_tokenizer.tokenize(x) for x in X]
+
+    comment_lengths = [len(comment) for comment in tokenized_X]
+    # plot_histogram(comment_lengths, 'length', 'count', 30)  # plot histogram of comment lengths
+    longest_comment_size = 256  # not actually the longest, chosen by hand, to encompass most of samples (equal to sequence size)
+
+    # min_count: ignores all words with total absolute frequency lower than this
+    # window: maximum distance between the current and predicted word within a sentence
+    # vector_size: dimensionality of the word output vectors
+    word_vector_size = 32
+    model = Word2Vec(min_count=5, vector_size=word_vector_size, window=5)
+    model.build_vocab(tokenized_X)
+    model.train(tokenized_X, total_examples=model.corpus_count, epochs=1000)  # train word vectors
+
+    X_tensorized = tensorize_data(tokenized_X, model, word_vector_size, longest_comment_size)
+    y_tensorized = torch.tensor(y)
+
+    # prepare key padding mask
+    key_padding_mask = prepare_key_padding_mask(tokenized_X, comment_lengths, longest_comment_size)
+
+    return X_tensorized, y_tensorized, key_padding_mask
+
+
+def preprocess_clickbait(filepath):
+    """
+    Preprocess clickbait data from two text files.
+    1 - clickbait, 0 – not clickbait.
+
+    :param filepath: string path to the folder with data
+    :return: data in the shape of (X, y, mask)
+    """
+    X = []
+    y = []
+
+    # read clickbait data
+    with open(filepath + 'clickbait_data') as f:
+        lines = f.readlines()
+        for line in lines:
+            if line != '\n':
+                X.append(line.strip())
+                y.append(1)
+
+    # read non-clickbait data
+    with open(filepath + 'non_clickbait_data', encoding="utf8") as f:
+        lines = f.readlines()
+        for line in lines:
+            if line != '\n':
+                X.append(line.strip())
+                y.append(0)
+
+    # make target label binary integer
+    y = list(map(lambda c: [1, 0] if c == 0 else [0, 1], y))  # one-hot encode labels
+
+    bert_tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+    tokenized_X = [bert_tokenizer.tokenize(x) for x in X]
+
+    comment_lengths = [len(comment) for comment in tokenized_X]
+    # plot_histogram(comment_lengths, 'length', 'count', 30)  # plot histogram of comment lengths
+    longest_comment_size = 256  # not actually the longest, chosen by hand, to encompass most of samples (equal to sequence size)
+
+    # min_count: ignores all words with total absolute frequency lower than this
+    # window: maximum distance between the current and predicted word within a sentence
+    # vector_size: dimensionality of the word output vectors
+    word_vector_size = 32
+    model = Word2Vec(min_count=5, vector_size=word_vector_size, window=5)
+    model.build_vocab(tokenized_X)
+    model.train(tokenized_X, total_examples=model.corpus_count, epochs=1000)  # train word vectors
+
+    X_tensorized = tensorize_data(tokenized_X, model, word_vector_size, longest_comment_size)
+    y_tensorized = torch.tensor(y)
+
+    # prepare key padding mask
+    key_padding_mask = prepare_key_padding_mask(tokenized_X, comment_lengths, longest_comment_size)
+
+    return X_tensorized, y_tensorized, key_padding_mask
+
+
+def preprocess_humor_detection(filepath):
+    """
+    Preprocess humor detection data from CSV file.
+    1 - True (is humor), 0 – False (is not humor).
+
+    :param filepath: string path to the folder with data
+    :return: data in the shape of (X, y, mask)
+    """
+    data = pd.read_csv(filepath + 'dataset.csv')
+
+    X = data["text"]
+    y = data["humor"]
+
+    # make target label binary integer
+    X = list(map(lambda s: str(s), X))
+    y = list(map(lambda c: [1, 0] if c is False else [0, 1], y))  # one-hot encode labels
+
+    # take only the first 50.000 samples to make it fit into memory
+    X = X[:50000]
+    y = y[:50000]
+
+    bert_tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+    tokenized_X = [bert_tokenizer.tokenize(x) for x in X]
+
+    comment_lengths = [len(comment) for comment in tokenized_X]
+    # plot_histogram(comment_lengths, 'length', 'count', 30)  # plot histogram of comment lengths
+    longest_comment_size = 256  # not actually the longest, chosen by hand, to encompass most of samples (equal to sequence size)
+
+    # min_count: ignores all words with total absolute frequency lower than this
+    # window: maximum distance between the current and predicted word within a sentence
+    # vector_size: dimensionality of the word output vectors
+    word_vector_size = 32
+    model = Word2Vec(min_count=5, vector_size=word_vector_size, window=5)
+    model.build_vocab(tokenized_X)
+    model.train(tokenized_X, total_examples=model.corpus_count, epochs=1000)  # train word vectors
+
+    X_tensorized = tensorize_data(tokenized_X, model, word_vector_size, longest_comment_size)
+    y_tensorized = torch.tensor(y)
+
+    # prepare key padding mask
+    key_padding_mask = prepare_key_padding_mask(tokenized_X, comment_lengths, longest_comment_size)
+
+    return X_tensorized, y_tensorized, key_padding_mask
 
 

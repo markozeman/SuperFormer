@@ -17,10 +17,13 @@ def plot_histogram(data, x_label, y_label, bins):
     plt.show()
 
 
-def plot_multiple_results(means, stds, legend_lst, title, colors, x_label, y_label, vertical_lines_x, vl_min, vl_max, show_CI=True, text_strings=None):
+def plot_multiple_results(num_tasks, num_epochs, first_average, means, stds, legend_lst, title, colors, x_label, y_label, vertical_lines_x, vl_min, vl_max, show_CI=True, text_strings=None):
     """
     Plot more lines from the saved results on the same plot with additional information.
 
+    :param num_tasks: number of tasks trained
+    :param num_epochs: number of epochs per task
+    :param first_average: string - show results on 'first' task only or the 'average' results until current task index
     :param means: list - [mean_acc, mean_auroc, mean_auprc]
     :param stds: list - [std_acc, std_auroc, std_auprc]
     :param legend_lst: list of label values (len(legend_lst)=len(means))
@@ -37,6 +40,18 @@ def plot_multiple_results(means, stds, legend_lst, title, colors, x_label, y_lab
     """
     font = {'size': 18}
     plt.rc('font', **font)
+    plt.grid(axis='y')
+
+    # plot horizontal lines to explain learning
+    for i in range(num_tasks):
+        x_min = i * num_epochs if i == 0 else (i * num_epochs) - 1
+        x_max = ((i + 1) * num_epochs) - 1
+        plt.hlines(y=103, xmin=x_min, xmax=x_max)
+        plt.vlines(x=x_min, ymin=102, ymax=104)
+        plt.vlines(x=x_max, ymin=102, ymax=104)
+
+        plt.text(x=x_min + 1, y=104, fontsize=12,
+                 s='Learning %s; Results for %s' % (str(i+1), str(1) if first_average == 'first' else '1-%s' % (i+1) if i != 0 else str(1)))
 
     # plot lines with confidence intervals
     i = 0
@@ -54,7 +69,7 @@ def plot_multiple_results(means, stds, legend_lst, title, colors, x_label, y_lab
         i += 1
 
     if legend_lst:
-        plt.legend(legend_lst)
+        plt.legend(legend_lst, loc='lower left')
     plt.xlabel(x_label)
     plt.ylabel(y_label)
     plt.title(title)
