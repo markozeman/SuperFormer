@@ -9,10 +9,10 @@ from sklearn.preprocessing import StandardScaler
 
 
 if __name__ == '__main__':
-    superposition = False
+    superposition = True
     first_average = 'first'     # show results on 'first' task or the 'average' results until current task
 
-    use_MLP = False      # if True use MLP, else use Transformer
+    use_MLP = True      # if True use MLP, else use Transformer
     input_size = 32
     num_heads = 4
     num_layers = 1
@@ -22,11 +22,20 @@ if __name__ == '__main__':
     element_wise = True     # if True, parameters in self attention are superimposed element-wise
 
     batch_size = 128
-    num_runs = 3
+    num_runs = 1
     num_tasks = 6   # todo
     # num_epochs = 50 if use_MLP else 10
     num_epochs = 10
     learning_rate = 0.001
+
+    # Permutations are only available for the first 3 tasks
+    permutations = [['HS', 'SA', 'S'],
+                    ['HS', 'S', 'SA'],
+                    ['SA', 'HS', 'S'],
+                    ['SA', 'S', 'HS'],
+                    ['S', 'HS', 'SA'],
+                    ['S', 'SA', 'HS']]
+    permutation_index = 0
 
     # # save X, y, mask for all 6 datasets
     # X, y, mask = preprocess_hate_speech('datasets/hate_speech.csv')
@@ -106,29 +115,17 @@ if __name__ == '__main__':
 
             # prepare data
             if t == 0:
-                X = torch.load('Word2Vec_embeddings/X_hate_speech.pt').float()
-                y = torch.load('Word2Vec_embeddings/y_hate_speech.pt')
-                mask = torch.load('Word2Vec_embeddings/mask_hate_speech.pt').float()
+                X, y, mask = get_data(permutations[permutation_index][0])
             elif t == 1:
-                X = torch.load('Word2Vec_embeddings/X_IMDB_sentiment_analysis.pt').float()
-                y = torch.load('Word2Vec_embeddings/y_IMDB_sentiment_analysis.pt')
-                mask = torch.load('Word2Vec_embeddings/mask_IMDB_sentiment_analysis.pt').float()
+                X, y, mask = get_data(permutations[permutation_index][1])
             elif t == 2:
-                X = torch.load('Word2Vec_embeddings/X_sms_spam.pt').float()
-                y = torch.load('Word2Vec_embeddings/y_sms_spam.pt')
-                mask = torch.load('Word2Vec_embeddings/mask_sms_spam.pt').float()
+                X, y, mask = get_data(permutations[permutation_index][2])
             elif t == 3:
-                X = torch.load('Word2Vec_embeddings/X_sentiment_analysis_2.pt').float()
-                y = torch.load('Word2Vec_embeddings/y_sentiment_analysis_2.pt')
-                mask = torch.load('Word2Vec_embeddings/mask_sentiment_analysis_2.pt').float()
+                X, y, mask = get_data('SA_2')
             elif t == 4:
-                X = torch.load('Word2Vec_embeddings/X_clickbait.pt').float()
-                y = torch.load('Word2Vec_embeddings/y_clickbait.pt')
-                mask = torch.load('Word2Vec_embeddings/mask_clickbait.pt').float()
+                X, y, mask = get_data('C')
             elif t == 5:
-                X = torch.load('Word2Vec_embeddings/X_humor_detection.pt').float()
-                y = torch.load('Word2Vec_embeddings/y_humor_detection.pt')
-                mask = torch.load('Word2Vec_embeddings/mask_humor_detection.pt').float()
+                X, y, mask = get_data('HD')
 
             if standardize_input:
                 for i in range(X.shape[0]):
@@ -257,17 +254,27 @@ if __name__ == '__main__':
 
     for t in range(num_tasks):
         if t == 0:
-            s = 'Hate speech'
+            # s = 'Hate speech'
+            s = permutations[permutation_index][0]
         elif t == 1:
-            s = 'IMDB sentiment analysis'
+            # s = 'IMDB sentiment analysis'
+            s = permutations[permutation_index][1]
         elif t == 2:
-            s = 'SMS spam'
+            # s = 'SMS spam'
+            s = permutations[permutation_index][2]
         elif t == 3:
             s = 'Amazon, Yelp sentiment analysis'
         elif t == 4:
             s = 'Clickbait'
         elif t == 5:
             s = 'Humor detection'
+
+        if s == 'HS':
+            s = 'Hate speech'
+        elif s == 'SA':
+            s = 'IMDB sentiment analysis'
+        elif s == 'S':
+            s = 'SMS spam'
 
         print('------------------------------------------')
         print('%s - Accuracy = %.1f +/- %.1f' % (s, mean_acc[t], std_acc[t]))
@@ -280,7 +287,7 @@ if __name__ == '__main__':
     mean_auprc, std_auprc = np.mean(auprc_epoch, axis=0), np.std(auprc_epoch, axis=0)
 
     show_only_accuracy = False
-    min_y = 30
+    min_y = 70
     if show_only_accuracy:
         plot_multiple_results(num_tasks, num_epochs, first_average,
                               [mean_acc], [std_acc], ['Accuracy'],

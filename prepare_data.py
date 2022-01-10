@@ -334,3 +334,37 @@ def preprocess_humor_detection(filepath):
     return X_tensorized, y_tensorized, key_padding_mask
 
 
+def get_data(s):
+    """
+    Get data for string s abbreviation.
+
+    :param s: string of dataset abbreviation name
+    :return: X, y, mask
+    """
+    if s == 'HS':
+        X = torch.load('Word2Vec_embeddings/X_hate_speech.pt').float()
+        y = torch.load('Word2Vec_embeddings/y_hate_speech.pt')
+        mask = torch.load('Word2Vec_embeddings/mask_hate_speech.pt').float()
+    elif s == 'SA':
+        X = torch.load('Word2Vec_embeddings/X_IMDB_sentiment_analysis.pt').float()
+        y = torch.load('Word2Vec_embeddings/y_IMDB_sentiment_analysis.pt')
+        mask = torch.load('Word2Vec_embeddings/mask_IMDB_sentiment_analysis.pt').float()
+    elif s == 'S':
+        X = torch.load('Word2Vec_embeddings/X_sms_spam.pt').float()
+        y = torch.load('Word2Vec_embeddings/y_sms_spam.pt')
+        mask = torch.load('Word2Vec_embeddings/mask_sms_spam.pt').float()
+    elif s == 'SA_2':
+        X = torch.load('Word2Vec_embeddings/X_sentiment_analysis_2.pt').float()
+        y = torch.load('Word2Vec_embeddings/y_sentiment_analysis_2.pt')
+        mask = torch.load('Word2Vec_embeddings/mask_sentiment_analysis_2.pt').float()
+    elif s == 'C':
+        X = torch.load('Word2Vec_embeddings/X_clickbait.pt').float()
+        y = torch.load('Word2Vec_embeddings/y_clickbait.pt')
+        mask = torch.load('Word2Vec_embeddings/mask_clickbait.pt').float()
+    elif s == 'HD':
+        X = torch.load('Word2Vec_embeddings/X_humor_detection.pt').float()
+        y = torch.load('Word2Vec_embeddings/y_humor_detection.pt')
+        mask = torch.load('Word2Vec_embeddings/mask_humor_detection.pt').float()
+
+    return X, y, mask
+
