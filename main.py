@@ -10,9 +10,9 @@ from sklearn.preprocessing import StandardScaler
 
 if __name__ == '__main__':
     superposition = True
-    first_average = 'first'     # show results on 'first' task or the 'average' results until current task
+    first_average = 'average'     # show results on 'first' task or the 'average' results until current task
 
-    use_MLP = True      # if True use MLP, else use Transformer
+    use_MLP = False      # if True use MLP, else use Transformer
     input_size = 32
     num_heads = 4
     num_layers = 1
@@ -20,10 +20,12 @@ if __name__ == '__main__':
     num_classes = 2
     standardize_input = False
     element_wise = True     # if True, parameters in self attention are superimposed element-wise
+    do_early_stopping = False
+    restore_best_auroc = True
 
     batch_size = 128
-    num_runs = 1
-    num_tasks = 6   # todo
+    num_runs = 3
+    num_tasks = 3
     # num_epochs = 50 if use_MLP else 10
     num_epochs = 10
     learning_rate = 0.001
@@ -35,7 +37,8 @@ if __name__ == '__main__':
                     ['SA', 'S', 'HS'],
                     ['S', 'HS', 'SA'],
                     ['S', 'SA', 'HS']]
-    permutation_index = 0
+    permutation_index = 1
+    task_names = permutations[permutation_index] + ['SA_2', 'C', 'HD']
 
     # # save X, y, mask for all 6 datasets
     # X, y, mask = preprocess_hate_speech('datasets/hate_speech.csv')
@@ -87,6 +90,8 @@ if __name__ == '__main__':
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
+    task_epochs_all = []
+
     for r in range(num_runs):
         print('- - Run %d - -' % (r + 1))
 
@@ -97,6 +102,7 @@ if __name__ == '__main__':
 
         all_tasks_test_data = []
         contexts, layer_dimension = create_context_vectors(model, num_tasks, element_wise)
+        task_epochs = []
 
         for t in range(num_tasks):
             print('- Task %d -' % (t + 1))
@@ -107,6 +113,10 @@ if __name__ == '__main__':
             scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.1, patience=2,
                                                                    threshold=0.0001, min_lr=1e-8, verbose=True)
 
+            # stop training if none of the validation metrics improved from the previous epoch (accuracy, AUROC, AUPRC)
+            if do_early_stopping:
+                early_stopping = (0, 0, 0)  # (accuracy, AUROC, AUPRC)
+
             print('Number of trainable parameters: ', count_trainable_parameters(model))
             # print(model)
             # summary(model, [(batch_size, 256, 32), (batch_size, 256)])
@@ -114,18 +124,7 @@ if __name__ == '__main__':
             best_auroc_val = 0
 
             # prepare data
-            if t == 0:
-                X, y, mask = get_data(permutations[permutation_index][0])
-            elif t == 1:
-                X, y, mask = get_data(permutations[permutation_index][1])
-            elif t == 2:
-                X, y, mask = get_data(permutations[permutation_index][2])
-            elif t == 3:
-                X, y, mask = get_data('SA_2')
-            elif t == 4:
-                X, y, mask = get_data('C')
-            elif t == 5:
-                X, y, mask = get_data('HD')
+            X, y, mask = get_data(task_names[t])
 
             if standardize_input:
                 for i in range(X.shape[0]):
@@ -206,6 +205,18 @@ if __name__ == '__main__':
                         best_auroc_val = val_auroc
                         torch.save(model.state_dict(), 'models/model_best.pt')
 
+                if do_early_stopping:
+                    # check early stopping criteria
+                    # if val_acc > early_stopping[0] or val_auroc > early_stopping[1] or val_auprc > early_stopping[2]:     # improvement on acc, auroc, auprc
+                    if val_acc > early_stopping[0]:   # improvement only on acc
+                        early_stopping = (val_acc, val_auroc, val_auprc)
+                    else:   # stop training
+                        task_epochs.append(epoch)
+                        break
+
+                if epoch == num_epochs - 1:  # last epoch: early stopping did not stop early
+                    task_epochs.append(epoch)
+
                 # track results with or without superposition
                 acc_e, auroc_e, auprc_e = evaluate_results(model, contexts, layer_dimension, all_tasks_test_data,
                                                            superposition, t, first_average, use_MLP, batch_size)
@@ -215,7 +226,8 @@ if __name__ == '__main__':
                 auprc_epoch[r, (t * num_epochs) + epoch] = auprc_e
 
             # check test set
-            model.load_state_dict(torch.load('models/model_best.pt'))   # todo
+            if restore_best_auroc:
+                model.load_state_dict(torch.load('models/model_best.pt'))   # todo
             model.eval()
             with torch.no_grad():
                 test_outputs = []
@@ -246,6 +258,8 @@ if __name__ == '__main__':
             if superposition:   # perform context multiplication
                 if t < num_tasks - 1:   # do not multiply with contexts at the end of last task
                     context_multiplication(model, contexts, layer_dimension, t)
+
+        task_epochs_all.append(task_epochs)
 
     # display mean and standard deviation per task
     mean_acc, std_acc = np.mean(acc_arr, axis=0), np.std(acc_arr, axis=0)
@@ -281,29 +295,80 @@ if __name__ == '__main__':
         print('%s - AUROC    = %.1f +/- %.1f' % (s, mean_auroc[t], std_auroc[t]))
         print('%s - AUPRC    = %.1f +/- %.1f' % (s, mean_auprc[t], std_auprc[t]))
 
-    # display mean and standard deviation per epoch
-    mean_acc, std_acc = np.mean(acc_epoch, axis=0), np.std(acc_epoch, axis=0)
-    mean_auroc, std_auroc = np.mean(auroc_epoch, axis=0), np.std(auroc_epoch, axis=0)
-    mean_auprc, std_auprc = np.mean(auprc_epoch, axis=0), np.std(auprc_epoch, axis=0)
-
     show_only_accuracy = False
-    min_y = 70
-    if show_only_accuracy:
-        plot_multiple_results(num_tasks, num_epochs, first_average,
-                              [mean_acc], [std_acc], ['Accuracy'],
-                              '%s task results, %s model, %s, el.-wise=%s' % (first_average, 'MLP' if use_MLP else 'Transformer',
-                                                                 'superposition' if superposition else 'no superposition',
-                                                                              str(element_wise) if superposition and not use_MLP else '/'),
-                              ['tab:blue'], 'Epoch', 'Accuracy (%)',
-                              [((i + 1) * num_epochs) - 1 for i in range(num_tasks - 1)], min_y, 100)
-    else:   # show all three metrics
-        plot_multiple_results(num_tasks, num_epochs, first_average,
-                              [mean_acc, mean_auroc, mean_auprc], [std_acc, std_auroc, std_auprc], ['Accuracy', 'AUROC', 'AUPRC'],
-                              '%s task results, %s model, %s, el.-wise=%s' %
-                              (first_average, 'MLP' if use_MLP else 'Transformer', 'superposition' if superposition else 'no superposition',
-                               str(element_wise) if superposition and not use_MLP else '/'),
-                              ['tab:blue', 'tab:orange', 'tab:green'], 'Epoch', 'Metric value',
-                              [((i + 1) * num_epochs) - 1 for i in range(num_tasks - 1)], min_y, 100)
+    min_y = 50
+    colors = ['tab:blue', 'tab:orange', 'tab:green']
+    if do_early_stopping:
+        vertical_lines_x = []
+        for task_epochs in task_epochs_all:
+            vertical_lines_x.append([sum(task_epochs[:i+1]) - 1 for i in range(len(task_epochs))])
+        if num_runs == 1:
+            vertical_lines_x = vertical_lines_x[0]
+
+        # delete empty (0) values in arrays
+        acc_epoch_no0 = [np.delete(acc_epoch[row_i], np.where(acc_epoch[row_i] == 0)[0]) for row_i in range(len(acc_epoch))]
+        auroc_epoch_no0 = [np.delete(auroc_epoch[row_i], np.where(auroc_epoch[row_i] == 0)[0]) for row_i in range(len(auroc_epoch))]
+        auprc_epoch_no0 = [np.delete(auprc_epoch[row_i], np.where(auprc_epoch[row_i] == 0)[0]) for row_i in range(len(auprc_epoch))]
+
+        acc_epoch_no0 = [np.array(acc_epoch_no0[row_i])[vertical_lines_x[row_i]] for row_i in range(len(acc_epoch_no0))]
+        auroc_epoch_no0 = [np.array(auroc_epoch_no0[row_i])[vertical_lines_x[row_i]] for row_i in range(len(auroc_epoch_no0))]
+        auprc_epoch_no0 = [np.array(auprc_epoch_no0[row_i])[vertical_lines_x[row_i]] for row_i in range(len(auprc_epoch_no0))]
+
+        # display mean and standard deviation per epoch
+        mean_acc, std_acc = np.mean(acc_epoch_no0, axis=0), np.std(acc_epoch_no0, axis=0)
+        mean_auroc, std_auroc = np.mean(auroc_epoch_no0, axis=0), np.std(auroc_epoch_no0, axis=0)
+        mean_auprc, std_auprc = np.mean(auprc_epoch_no0, axis=0), np.std(auprc_epoch_no0, axis=0)
+
+    else:
+        # display mean and standard deviation per epoch
+        mean_acc, std_acc = np.mean(acc_epoch, axis=0), np.std(acc_epoch, axis=0)
+        mean_auroc, std_auroc = np.mean(auroc_epoch, axis=0), np.std(auroc_epoch, axis=0)
+        mean_auprc, std_auprc = np.mean(auprc_epoch, axis=0), np.std(auprc_epoch, axis=0)
+
+        vertical_lines_x = [((i + 1) * num_epochs) - 1 for i in range(num_tasks)]
+
+    if (not do_early_stopping) or (do_early_stopping and num_runs == 1):
+        if show_only_accuracy:
+            plot_multiple_results(num_tasks, num_epochs, first_average,
+                                  [mean_acc], [std_acc], ['Accuracy'],
+                                  '#runs: %d, %s task results, %s model, %s, el.-wise=%s' % (num_runs, first_average,
+                                  'MLP' if use_MLP else 'Transformer', 'superposition' if superposition else 'no superposition',
+                                  str(element_wise) if superposition and not use_MLP else '/'), colors[0],
+                                  'Epoch', 'Accuracy (%)', vertical_lines_x[:-1], min_y, 100)
+        else:   # show all three metrics
+            plot_multiple_results(num_tasks, num_epochs, first_average,
+                                  [mean_acc, mean_auroc, mean_auprc], [std_acc, std_auroc, std_auprc], ['Accuracy', 'AUROC', 'AUPRC'],
+                                  '#runs: %d, %s task results, %s model, %s, el.-wise=%s' % (num_runs, first_average,
+                                  'MLP' if use_MLP else 'Transformer', 'superposition' if superposition else 'no superposition',
+                                  str(element_wise) if superposition and not use_MLP else '/'), colors,
+                                  'Epoch', 'Metric value', vertical_lines_x[:-1], min_y, 100)
+
+    # save only values at the end of task learning (at vertical lines), both mean and std
+    end_performance = {i: {'acc': 0, 'auroc': 0, 'auprc': 0, 'std_acc': 0, 'std_auroc': 0, 'std_auprc': 0}
+                       for i in range(num_tasks)}
+
+    for i in range(num_tasks):
+        if do_early_stopping:
+            # ver_lines = vertical_lines_x[i] if num_tasks > 1 else vertical_lines_x
+            index = i
+        else:
+            ver_lines = vertical_lines_x
+            index = ver_lines[i]
+
+        end_performance[i]['acc'] = mean_acc[index]
+        end_performance[i]['auroc'] = mean_auroc[index]
+        end_performance[i]['auprc'] = mean_auprc[index]
+        end_performance[i]['std_acc'] = std_acc[index]
+        end_performance[i]['std_auroc'] = std_auroc[index]
+        end_performance[i]['std_auprc'] = std_auprc[index]
+
+    metrics = ['acc', 'auroc', 'auprc']    # possibilities: 'acc', 'auroc', 'auprc'
+    print('Metrics at the end of each task training:\n', end_performance)
+    plot_multiple_histograms(end_performance, num_tasks, metrics,
+                             '#runs: %d, %s task results, %s model, %s, el.-wise=%s, %s' % (num_runs, first_average,
+                             'MLP' if use_MLP else 'Transformer', 'superposition' if superposition else 'no superposition',
+                             str(element_wise) if superposition and not use_MLP else '/', 'ES' if do_early_stopping else 'no ES'),
+                             colors[:len(metrics)], 'Metric value', min_y)
 
 
 

@@ -1,3 +1,4 @@
+import math
 import matplotlib.pyplot as plt
 
 
@@ -14,6 +15,46 @@ def plot_histogram(data, x_label, y_label, bins):
     plt.hist(data, density=False, bins=bins)
     plt.xlabel(x_label)
     plt.ylabel(y_label)
+    plt.show()
+
+
+def plot_multiple_histograms(data, num_tasks, metrics, title, colors, y_label, y_min):
+    """
+    Plot multiple vertical bars for each task.
+
+    :param data: dictionary with mean and std data for each task
+    :param num_tasks: number of tasks trained
+    :param metrics: list of strings - possibilities: 'acc', 'auroc', 'auprc'
+    :param title: plot title (string)
+    :param colors: list of colors used for bars (len(colors)=len(metrics))
+    :param y_label: label of axis y (string)
+    :param y_min: minimum y value
+    :return: None
+    """
+    font = {'size': 15}
+    plt.rc('font', **font)
+    plt.grid(axis='y')
+
+    bar_width = 0.5
+    for i, m in enumerate(metrics):
+        heights = [data[i][m] for i in range(num_tasks)]
+        x_pos = [(n * len(metrics)) + (i * bar_width) for n in range(num_tasks)]
+        plt.bar(x_pos, heights, width=bar_width, color=colors[i], edgecolor='black',
+                yerr=[data[i]['std_' + m] for i in range(num_tasks)], capsize=7, label=m)
+
+        # plot numbers of mean (height) on every bar
+        for j, x in enumerate(x_pos):
+            plt.text(x - 0.2, y_min + 1, round(heights[j], 1), {'size': 10})
+
+    ax = plt.gca()
+    ax.set_ylim([y_min, 100])
+
+    plt.xticks([(i * len(metrics)) + (math.floor(len(metrics) / 2) * bar_width) for i in range(num_tasks)],
+               ['Task %d' % (i+1) for i in range(num_tasks)])
+
+    plt.ylabel(y_label)
+    plt.title(title)
+    plt.legend()
     plt.show()
 
 
@@ -42,16 +83,17 @@ def plot_multiple_results(num_tasks, num_epochs, first_average, means, stds, leg
     plt.rc('font', **font)
     plt.grid(axis='y')
 
-    # plot horizontal lines to explain learning
-    for i in range(num_tasks):
-        x_min = i * num_epochs if i == 0 else (i * num_epochs) - 1
-        x_max = ((i + 1) * num_epochs) - 1
-        plt.hlines(y=103, xmin=x_min, xmax=x_max)
-        plt.vlines(x=x_min, ymin=102, ymax=104)
-        plt.vlines(x=x_max, ymin=102, ymax=104)
+    if num_tasks * num_epochs == len(means[0]):
+        # plot horizontal lines to explain learning
+        for i in range(num_tasks):
+            x_min = i * num_epochs if i == 0 else (i * num_epochs) - 1
+            x_max = ((i + 1) * num_epochs) - 1
+            plt.hlines(y=103, xmin=x_min, xmax=x_max)
+            plt.vlines(x=x_min, ymin=102, ymax=104)
+            plt.vlines(x=x_max, ymin=102, ymax=104)
 
-        plt.text(x=x_min + 1, y=104, fontsize=12,
-                 s='Learning %s; Results for %s' % (str(i+1), str(1) if first_average == 'first' else '1-%s' % (i+1) if i != 0 else str(1)))
+            plt.text(x=x_min + 1, y=104, fontsize=12,
+                     s='Learning %s; Results for %s' % (str(i+1), str(1) if first_average == 'first' else '1-%s' % (i+1) if i != 0 else str(1)))
 
     # plot lines with confidence intervals
     i = 0
