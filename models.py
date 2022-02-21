@@ -36,7 +36,6 @@ class MyTransformer(nn.Module):
     def __init__(self, input_size, num_heads, num_layers, dim_feedforward, num_classes):
         super(MyTransformer, self).__init__()
 
-        # d_model = input_size
         transformer_encoder_layer = MyTransformerEncoderLayer(input_size, num_heads, dim_feedforward, batch_first=True)
         self.transformer_encoder = TransformerEncoder(transformer_encoder_layer, num_layers)
 

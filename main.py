@@ -1,3 +1,4 @@
+import time
 import numpy as np
 from help_functions import *
 from models import *
@@ -20,12 +21,13 @@ if __name__ == '__main__':
     num_classes = 2
     standardize_input = False
     element_wise = True     # if True, parameters in self attention are superimposed element-wise
-    do_early_stopping = False
-    restore_best_auroc = True
+    restore_best_auroc = False
+    do_early_stopping = True
+    stopping_criteria = 'acc'  # possibilities: 'acc', 'auroc', 'auprc'
 
     batch_size = 128
-    num_runs = 3
-    num_tasks = 3
+    num_runs = 2
+    num_tasks = 6
     # num_epochs = 50 if use_MLP else 10
     num_epochs = 10
     learning_rate = 0.001
@@ -91,14 +93,19 @@ if __name__ == '__main__':
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     task_epochs_all = []
+    times_per_run = []
 
     for r in range(num_runs):
         print('- - Run %d - -' % (r + 1))
+
+        start_time = time.time()
 
         if use_MLP:
             model = MLP(input_size, num_classes).to(device)
         else:
             model = MyTransformer(input_size, num_heads, num_layers, dim_feedforward, num_classes).to(device)
+
+        print(model)
 
         all_tasks_test_data = []
         contexts, layer_dimension = create_context_vectors(model, num_tasks, element_wise)
@@ -208,9 +215,14 @@ if __name__ == '__main__':
                 if do_early_stopping:
                     # check early stopping criteria
                     # if val_acc > early_stopping[0] or val_auroc > early_stopping[1] or val_auprc > early_stopping[2]:     # improvement on acc, auroc, auprc
-                    if val_acc > early_stopping[0]:   # improvement only on acc
+                    if stopping_criteria == 'acc' and val_acc > early_stopping[0]:   # improvement only on acc
+                        early_stopping = (val_acc, val_auroc, val_auprc)
+                    elif stopping_criteria == 'auroc' and val_auroc > early_stopping[1]:   # improvement only on auroc
+                        early_stopping = (val_acc, val_auroc, val_auprc)
+                    elif stopping_criteria == 'auprc' and val_auprc > early_stopping[2]:   # improvement only on auprc
                         early_stopping = (val_acc, val_auroc, val_auprc)
                     else:   # stop training
+                        print('Early stopped - %s got worse in this epoch.' % stopping_criteria)
                         task_epochs.append(epoch)
                         break
 
@@ -260,6 +272,17 @@ if __name__ == '__main__':
                     context_multiplication(model, contexts, layer_dimension, t)
 
         task_epochs_all.append(task_epochs)
+
+        end_time = time.time()
+        time_elapsed = end_time - start_time
+        times_per_run.append(time_elapsed)
+        print('Time elapsed for this run:', round(time_elapsed, 2), 's')
+
+    epochs_per_run = np.array(task_epochs_all) + 1    # +1 to be consistent with CL benchmarks
+    print('\nEpochs per run: ', epochs_per_run)
+    print('Times per run: ', times_per_run)
+    print('Runs: %d,  Average time per run: %.2f +/ %.2f s' %
+          (num_runs, np.mean(np.array(times_per_run)), np.std(np.array(times_per_run))))
 
     # display mean and standard deviation per task
     mean_acc, std_acc = np.mean(acc_arr, axis=0), np.std(acc_arr, axis=0)
