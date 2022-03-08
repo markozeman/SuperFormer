@@ -11,6 +11,7 @@ from sklearn.preprocessing import StandardScaler
 
 if __name__ == '__main__':
     superposition = True
+    superposition_each_epoch = False
     first_average = 'average'     # show results on 'first' task or the 'average' results until current task
 
     use_MLP = False      # if True use MLP, else use Transformer
@@ -23,7 +24,7 @@ if __name__ == '__main__':
     element_wise = True     # if True, parameters in self attention are superimposed element-wise
     restore_best_auroc = False
     do_early_stopping = True
-    stopping_criteria = 'acc'  # possibilities: 'acc', 'auroc', 'auprc'
+    stopping_criteria = 'auroc'  # possibilities: 'acc', 'auroc', 'auprc'
 
     batch_size = 128
     num_runs = 2
@@ -39,7 +40,7 @@ if __name__ == '__main__':
                     ['SA', 'S', 'HS'],
                     ['S', 'HS', 'SA'],
                     ['S', 'SA', 'HS']]
-    permutation_index = 1
+    permutation_index = 0
     task_names = permutations[permutation_index] + ['SA_2', 'C', 'HD']
 
     # # save X, y, mask for all 6 datasets
@@ -224,14 +225,22 @@ if __name__ == '__main__':
                     else:   # stop training
                         print('Early stopped - %s got worse in this epoch.' % stopping_criteria)
                         task_epochs.append(epoch)
+                        acc_e, auroc_e, auprc_e = evaluate_results(model, contexts, layer_dimension, all_tasks_test_data,
+                                                                   superposition, t, first_average, use_MLP, batch_size)
+                        acc_epoch[r, (t * num_epochs) + epoch] = acc_e
+                        auroc_epoch[r, (t * num_epochs) + epoch] = auroc_e
+                        auprc_epoch[r, (t * num_epochs) + epoch] = auprc_e
                         break
 
                 if epoch == num_epochs - 1:  # last epoch: early stopping did not stop early
                     task_epochs.append(epoch)
 
                 # track results with or without superposition
-                acc_e, auroc_e, auprc_e = evaluate_results(model, contexts, layer_dimension, all_tasks_test_data,
-                                                           superposition, t, first_average, use_MLP, batch_size)
+                if superposition_each_epoch or (epoch == num_epochs - 1):   # calculate results for each epoch or only the last epoch in task
+                    acc_e, auroc_e, auprc_e = evaluate_results(model, contexts, layer_dimension, all_tasks_test_data,
+                                                               superposition, t, first_average, use_MLP, batch_size)
+                else:
+                    acc_e, auroc_e, auprc_e = 0, 0, 0
 
                 acc_epoch[r, (t * num_epochs) + epoch] = acc_e
                 auroc_epoch[r, (t * num_epochs) + epoch] = auroc_e
@@ -239,7 +248,7 @@ if __name__ == '__main__':
 
             # check test set
             if restore_best_auroc:
-                model.load_state_dict(torch.load('models/model_best.pt'))   # todo
+                model.load_state_dict(torch.load('models/model_best.pt'))
             model.eval()
             with torch.no_grad():
                 test_outputs = []
@@ -283,6 +292,8 @@ if __name__ == '__main__':
     print('Times per run: ', times_per_run)
     print('Runs: %d,  Average time per run: %.2f +/ %.2f s' %
           (num_runs, np.mean(np.array(times_per_run)), np.std(np.array(times_per_run))))
+    print('Runs: %d,  Average #epochs for all tasks: %.2f +/ %.2f' %
+          (num_runs, np.mean(np.array([sum(l) for l in epochs_per_run])), np.std(np.array([sum(l) for l in epochs_per_run]))))
 
     # display mean and standard deviation per task
     mean_acc, std_acc = np.mean(acc_arr, axis=0), np.std(acc_arr, axis=0)
@@ -328,6 +339,7 @@ if __name__ == '__main__':
         if num_runs == 1:
             vertical_lines_x = vertical_lines_x[0]
 
+        '''
         # delete empty (0) values in arrays
         acc_epoch_no0 = [np.delete(acc_epoch[row_i], np.where(acc_epoch[row_i] == 0)[0]) for row_i in range(len(acc_epoch))]
         auroc_epoch_no0 = [np.delete(auroc_epoch[row_i], np.where(auroc_epoch[row_i] == 0)[0]) for row_i in range(len(auroc_epoch))]
@@ -336,6 +348,16 @@ if __name__ == '__main__':
         acc_epoch_no0 = [np.array(acc_epoch_no0[row_i])[vertical_lines_x[row_i]] for row_i in range(len(acc_epoch_no0))]
         auroc_epoch_no0 = [np.array(auroc_epoch_no0[row_i])[vertical_lines_x[row_i]] for row_i in range(len(auroc_epoch_no0))]
         auprc_epoch_no0 = [np.array(auprc_epoch_no0[row_i])[vertical_lines_x[row_i]] for row_i in range(len(auprc_epoch_no0))]
+
+        # display mean and standard deviation
+        mean_acc, std_acc = np.mean(acc_epoch_no0, axis=0), np.std(acc_epoch_no0, axis=0)
+        mean_auroc, std_auroc = np.mean(auroc_epoch_no0, axis=0), np.std(auroc_epoch_no0, axis=0)
+        mean_auprc, std_auprc = np.mean(auprc_epoch_no0, axis=0), np.std(auprc_epoch_no0, axis=0)
+        '''
+
+        acc_epoch_no0 = remove_empty_values(acc_epoch, num_tasks, num_epochs)
+        auroc_epoch_no0 = remove_empty_values(auroc_epoch, num_tasks, num_epochs)
+        auprc_epoch_no0 = remove_empty_values(auprc_epoch, num_tasks, num_epochs)
 
         # display mean and standard deviation per epoch
         mean_acc, std_acc = np.mean(acc_epoch_no0, axis=0), np.std(acc_epoch_no0, axis=0)

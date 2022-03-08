@@ -40,3 +40,25 @@ def get_stats(outputs, y):
     acc = np.sum(true == predicted) / true.shape[0]
     return acc, auroc, auprc
 
+
+def remove_empty_values(metric_epoch, num_tasks, num_epochs):
+    """
+    Remove empty values from 'metric_epoch', where there are zeros at some epochs (because of early stopping).
+
+    :param metric_epoch: array of size (num_runs, num_tasks * num_epochs) with 0 values where early stopping occured
+    :param num_tasks: number of tasks
+    :param num_epochs: number of epochs per task
+    :return: array of size (num_runs, num_tasks) with final metric value for each task in each run
+    """
+    epoch_no0 = []
+    for row_i in range(len(metric_epoch)):
+        row = metric_epoch[row_i]
+        epoch_no0_row = []
+        for task_i in range(num_tasks):
+            index = ((task_i + 1) * num_epochs) - 1  # index of the last measured metric for each task
+            while row[index] == 0:
+                index -= 1
+            epoch_no0_row.append(row[index])
+        epoch_no0.append(epoch_no0_row)
+    return epoch_no0
+

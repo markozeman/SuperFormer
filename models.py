@@ -91,10 +91,12 @@ class MLP(nn.Module):
     def __init__(self, input_size, num_classes):
         super(MLP, self).__init__()
 
+        hidden_size = 41    # 41 - to match (or slightly increase) number of parameters in transformer model
+
         self.mlp = nn.Sequential(
-            nn.Linear(input_size * 256, input_size),   # 8192 -> 32
+            nn.Linear(input_size * 256, hidden_size),   # 8192 -> 41
             nn.ReLU(),
-            nn.Linear(input_size, num_classes),  # 32 -> 2
+            nn.Linear(hidden_size, num_classes),  # 41 -> 2
         )
 
     def forward(self, input):

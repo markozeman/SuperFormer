@@ -2,7 +2,6 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 from gensim.models import Word2Vec
-from transformers import BertTokenizer
 from plots import *
 import torch
 
@@ -66,6 +65,8 @@ def preprocess_hate_speech(filepath):
     :param filepath: string path to the file with data
     :return: data in the shape of (X, y, mask)
     """
+    from transformers import BertTokenizer
+
     data = pd.read_csv(filepath)
 
     X = data["tweet"]
@@ -107,6 +108,8 @@ def preprocess_IMDB_reviews(filepath):
     :param filepath: string path to the file with data
     :return: data in the shape of (X, y, mask)
     """
+    from transformers import BertTokenizer
+
     data = pd.read_csv(filepath)
 
     X = data["review"]
@@ -148,6 +151,8 @@ def preprocess_SMS_spam(filepath):
     :param filepath: string path to the file with data
     :return: data in the shape of (X, y, mask)
     """
+    from transformers import BertTokenizer
+
     data = pd.read_csv(filepath, encoding='latin-1')
 
     X = data["v2"]
@@ -189,6 +194,8 @@ def preprocess_sentiment_analysis(filepath):
     :param filepath: string path to the folder with data
     :return: data in the shape of (X, y, mask)
     """
+    from transformers import BertTokenizer
+
     X = []
     y = []
 
@@ -243,6 +250,8 @@ def preprocess_clickbait(filepath):
     :param filepath: string path to the folder with data
     :return: data in the shape of (X, y, mask)
     """
+    from transformers import BertTokenizer
+
     X = []
     y = []
 
@@ -297,6 +306,8 @@ def preprocess_humor_detection(filepath):
     :param filepath: string path to the folder with data
     :return: data in the shape of (X, y, mask)
     """
+    from transformers import BertTokenizer
+
     data = pd.read_csv(filepath + 'dataset.csv')
 
     X = data["text"]
