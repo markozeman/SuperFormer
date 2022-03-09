@@ -7,6 +7,7 @@ from prepare_data import *
 from torchinfo import summary
 from sklearn.metrics import roc_auc_score, classification_report, confusion_matrix
 from sklearn.preprocessing import StandardScaler
+from torch.utils.data import TensorDataset
 
 
 if __name__ == '__main__':
@@ -29,7 +30,6 @@ if __name__ == '__main__':
     batch_size = 128
     num_runs = 2
     num_tasks = 6
-    # num_epochs = 50 if use_MLP else 10
     num_epochs = 10
     learning_rate = 0.001
 
@@ -92,6 +92,7 @@ if __name__ == '__main__':
     auprc_epoch = np.zeros((num_runs, num_tasks * num_epochs))
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    torch.cuda.empty_cache()
 
     task_epochs_all = []
     times_per_run = []
@@ -152,48 +153,49 @@ if __name__ == '__main__':
             index_val = round(0.8 * len(permutation))
             index_test = round(0.9 * len(permutation))
 
-            X_train, y_train, mask_train = X[:index_val, :, :].to(device), y[:index_val].to(device), mask[:index_val, :].to(device)   # data to device
+            X_train, y_train, mask_train = X[:index_val, :, :], y[:index_val], mask[:index_val, :]
             X_val, y_val, mask_val = X[index_val:index_test, :, :], y[index_val:index_test], mask[index_val:index_test, :]
             X_test, y_test, mask_test = X[index_test:, :, :], y[index_test:], mask[index_test:, :]
 
-            all_tasks_test_data.append([X_test, y_test, mask_test])
+            train_dataset = TensorDataset(X_train, y_train, mask_train)
+            val_dataset = TensorDataset(X_val, y_val, mask_val)
+            test_dataset = TensorDataset(X_test, y_test, mask_test)
+
+            train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size)
+            val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size)
+            test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size)
+
+            all_tasks_test_data.append(test_loader)
 
             for epoch in range(num_epochs):
                 model.train()
                 model = model.cuda()
 
-                permutation = torch.randperm(X_train.size()[0])
-
-                train_outputs = []
-                permuted_y = []
-                for i in range(0, X_train.size()[0], batch_size):
-                    indices = permutation[i:i + batch_size]
-                    batch_X, batch_y, batch_mask = X_train[indices], y_train[indices], mask_train[indices]
-                    permuted_y.append(batch_y)
+                for batch_X, batch_y, batch_mask in train_loader:
+                    if torch.cuda.is_available():
+                        batch_X = batch_X.cuda()
+                        batch_y = batch_y.cuda()
+                        batch_mask = batch_mask.cuda()
 
                     if use_MLP:
                         outputs = model.forward(batch_X)
                     else:
                         outputs = model.forward(batch_X, batch_mask)
-                    train_outputs.append(outputs)
 
                     optimizer.zero_grad()
                     loss = criterion(outputs, batch_y)
                     loss.backward()
                     optimizer.step()
 
-                # train_acc, train_auroc, train_auprc = get_stats(train_outputs, torch.cat(permuted_y, dim=0))
-                # print("Epoch: %d --- train acc: %.2f, train AUROC: %.2f, train AUPRC: %.2f" %
-                #       (epoch, train_acc * 100, train_auroc * 100, train_auprc * 100))
-
                 # check validation set
                 model.eval()
                 with torch.no_grad():
-                    model = model.cpu()     # model to CPU because of GPU memory restrictions
-
                     val_outputs = []
-                    for i in range(0, X_val.size()[0], batch_size):
-                        batch_X, batch_mask = X_val[i:i + batch_size], mask_val[i:i + batch_size]
+
+                    for batch_X, batch_y, batch_mask in val_loader:
+                        if torch.cuda.is_available():
+                            batch_X = batch_X.cuda()
+                            batch_mask = batch_mask.cuda()
 
                         if use_MLP:
                             outputs = model.forward(batch_X)
@@ -203,13 +205,13 @@ if __name__ == '__main__':
                         val_outputs.append(outputs)
 
                     val_acc, val_auroc, val_auprc = get_stats(val_outputs, y_val)
-                    val_loss = criterion(torch.cat(val_outputs, dim=0), y_val)
+                    val_loss = criterion(torch.cat(val_outputs, dim=0), y_val.cuda())
 
                     print("Epoch: %d --- val acc: %.2f, val AUROC: %.2f, val AUPRC: %.2f, val loss: %.3f" %
                           (epoch, val_acc * 100, val_auroc * 100, val_auprc * 100, val_loss))
 
                     scheduler.step(val_auroc)
-                    if val_auroc > best_auroc_val:
+                    if restore_best_auroc and val_auroc > best_auroc_val:
                         best_auroc_val = val_auroc
                         torch.save(model.state_dict(), 'models/model_best.pt')
 
@@ -232,11 +234,9 @@ if __name__ == '__main__':
                         auprc_epoch[r, (t * num_epochs) + epoch] = auprc_e
                         break
 
-                if epoch == num_epochs - 1:  # last epoch: early stopping did not stop early
-                    task_epochs.append(epoch)
-
                 # track results with or without superposition
                 if superposition_each_epoch or (epoch == num_epochs - 1):   # calculate results for each epoch or only the last epoch in task
+                    task_epochs.append(epoch)
                     acc_e, auroc_e, auprc_e = evaluate_results(model, contexts, layer_dimension, all_tasks_test_data,
                                                                superposition, t, first_average, use_MLP, batch_size)
                 else:
@@ -252,8 +252,11 @@ if __name__ == '__main__':
             model.eval()
             with torch.no_grad():
                 test_outputs = []
-                for i in range(0, X_test.size()[0], batch_size):
-                    batch_X, batch_mask = X_test[i:i + batch_size], mask_test[i:i + batch_size]
+
+                for batch_X, batch_y, batch_mask in test_loader:
+                    if torch.cuda.is_available():
+                        batch_X = batch_X.cuda()
+                        batch_mask = batch_mask.cuda()
 
                     if use_MLP:
                         outputs = model.forward(batch_X)
@@ -292,7 +295,7 @@ if __name__ == '__main__':
     print('Times per run: ', times_per_run)
     print('Runs: %d,  Average time per run: %.2f +/ %.2f s' %
           (num_runs, np.mean(np.array(times_per_run)), np.std(np.array(times_per_run))))
-    print('Runs: %d,  Average #epochs for all tasks: %.2f +/ %.2f' %
+    print('Runs: %d,  Average #epochs for all tasks: %.2f +/ %.2f\n' %
           (num_runs, np.mean(np.array([sum(l) for l in epochs_per_run])), np.std(np.array([sum(l) for l in epochs_per_run]))))
 
     # display mean and standard deviation per task
@@ -414,6 +417,5 @@ if __name__ == '__main__':
                              'MLP' if use_MLP else 'Transformer', 'superposition' if superposition else 'no superposition',
                              str(element_wise) if superposition and not use_MLP else '/', 'ES' if do_early_stopping else 'no ES'),
                              colors[:len(metrics)], 'Metric value', min_y)
-
 
 

@@ -69,14 +69,14 @@ def context_multiplication(model, contexts, layer_dimension, task_index):
         if name.endswith('weight'):  # only weight, not bias
             with torch.no_grad():
                 if layer_dimension[layer_index] == 0:
-                    context_matrix = torch.from_numpy(np.diag(contexts[task_index][layer_index]).astype(np.float32))
+                    context_matrix = torch.from_numpy(np.diag(contexts[task_index][layer_index]).astype(np.float32)).cuda()
                     new_params = torch.matmul(context_matrix, params)
                 elif layer_dimension[layer_index] == 1:
-                    context_matrix = torch.from_numpy(np.diag(contexts[task_index][layer_index]).astype(np.float32))
+                    context_matrix = torch.from_numpy(np.diag(contexts[task_index][layer_index]).astype(np.float32)).cuda()
                     new_params = torch.matmul(params, context_matrix)
                 elif layer_dimension[layer_index] == 2:    # element-wise multiplication
                     context_matrix = torch.from_numpy(np.reshape(contexts[task_index][layer_index],
-                                                                 newshape=(params.size()[0], params.size()[1])).astype(np.float32))
+                                                                 newshape=(params.size()[0], params.size()[1])).astype(np.float32)).cuda()
                     new_params = params * context_matrix
                 else:
                     raise ValueError('Layer index must be 0 or 1.')
@@ -135,18 +135,23 @@ def evaluate_current_task(model, all_tasks_test_data, task_index, use_MLP, batch
     Evaluate results on the first task, using the current model.
 
     :param model: torch model instance
-    :param all_tasks_test_data: list of all test data [X_test, y_test, mask_test] until the current task index
+    :param all_tasks_test_data: list of all test dataloaders ([X_test, y_test, mask_test]) until the current task index
     :param use_MLP: boolean - if True use MLP, else use Transformer
     :param task_index: index of the current task
     :param batch_size: batch size
     :return: accuracy, AUROC, AUPRC
     """
-    X, y, mask = all_tasks_test_data[task_index]
+    curr_test_loader = all_tasks_test_data[task_index]
+    y = curr_test_loader.dataset.tensors[1].cuda()
+
     model.eval()
     with torch.no_grad():
         test_outputs = []
-        for i in range(0, X.size()[0], batch_size):
-            batch_X, batch_mask = X[i:i + batch_size], mask[i:i + batch_size]
+
+        for batch_X, batch_y, batch_mask in curr_test_loader:
+            if torch.cuda.is_available():
+                batch_X = batch_X.cuda()
+                batch_mask = batch_mask.cuda()
 
             if use_MLP:
                 outputs = model.forward(batch_X)
