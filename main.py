@@ -18,7 +18,7 @@ if __name__ == '__main__':
     use_MLP = False      # if True use MLP, else use Transformer
     input_size = 32
     num_heads = 4
-    num_layers = 1
+    num_layers = 1      # number of transformer encoder layers
     dim_feedforward = 1024
     num_classes = 2
     standardize_input = False
@@ -375,7 +375,7 @@ if __name__ == '__main__':
 
         vertical_lines_x = [((i + 1) * num_epochs) - 1 for i in range(num_tasks)]
 
-    if (not do_early_stopping) or (do_early_stopping and num_runs == 1):
+    if superposition_each_epoch and not do_early_stopping:
         if show_only_accuracy:
             plot_multiple_results(num_tasks, num_epochs, first_average,
                                   [mean_acc], [std_acc], ['Accuracy'],
@@ -397,11 +397,9 @@ if __name__ == '__main__':
 
     for i in range(num_tasks):
         if do_early_stopping:
-            # ver_lines = vertical_lines_x[i] if num_tasks > 1 else vertical_lines_x
             index = i
         else:
-            ver_lines = vertical_lines_x
-            index = ver_lines[i]
+            index = vertical_lines_x[i]
 
         end_performance[i]['acc'] = mean_acc[index]
         end_performance[i]['auroc'] = mean_auroc[index]

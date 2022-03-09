@@ -13,7 +13,7 @@ if __name__ == '__main__':
     use_adapters = False      # if True use adapters, else use separate transformer networks for each task (upper bound)
     input_size = 32
     num_heads = 4
-    num_layers = 1
+    num_layers = 1      # number of transformer encoder layers
     dim_feedforward = 1024
     num_classes = 2
     standardize_input = False
@@ -292,7 +292,6 @@ if __name__ == '__main__':
             vertical_lines_x.append([sum(task_epochs[:i+1]) - 1 for i in range(len(task_epochs))])
         if num_runs == 1:
             vertical_lines_x = vertical_lines_x[0]
-
     else:
         vertical_lines_x = [((i + 1) * num_epochs) - 1 for i in range(num_tasks)]
 
@@ -303,31 +302,26 @@ if __name__ == '__main__':
     mean_auroc, std_auroc = np.mean(auroc_arr_average, axis=0), np.std(auroc_arr_average, axis=0)
     mean_auprc, std_auprc = np.mean(auprc_arr_average, axis=0), np.std(auprc_arr_average, axis=0)
 
-    if (not do_early_stopping) or (do_early_stopping and num_runs == 1):
-        if show_only_accuracy:
-            plot_multiple_results(num_tasks, num_epochs, first_average,
-                                  [mean_acc], [std_acc], ['Accuracy'],
-                                  '#runs: %d, %s task results, %s model' % (num_runs, first_average,
-                                  'Adapter' if use_adapters else 'Separate networks'), colors[0],
-                                  'Epoch', 'Accuracy (%)', vertical_lines_x[:-1], min_y, 100)
-        else:   # show all three metrics
-            plot_multiple_results(num_tasks, num_epochs, first_average,
-                                  [mean_acc, mean_auroc, mean_auprc], [std_acc, std_auroc, std_auprc], ['Accuracy', 'AUROC', 'AUPRC'],
-                                  '#runs: %d, %s task results, %s model' % (num_runs, first_average,
-                                  'Adapter' if use_adapters else 'Separate networks'), colors,
-                                  'Epoch', 'Metric value', vertical_lines_x[:-1], min_y, 100)
+    # if (not do_early_stopping) or (do_early_stopping and num_runs == 1):
+    #     if show_only_accuracy:
+    #         plot_multiple_results(num_tasks, num_epochs, first_average,
+    #                               [mean_acc], [std_acc], ['Accuracy'],
+    #                               '#runs: %d, %s task results, %s model' % (num_runs, first_average,
+    #                               'Adapter' if use_adapters else 'Separate networks'), colors[0],
+    #                               'Epoch', 'Accuracy (%)', vertical_lines_x[:-1], min_y, 100)
+    #     else:   # show all three metrics
+    #         plot_multiple_results(num_tasks, num_epochs, first_average,
+    #                               [mean_acc, mean_auroc, mean_auprc], [std_acc, std_auroc, std_auprc], ['Accuracy', 'AUROC', 'AUPRC'],
+    #                               '#runs: %d, %s task results, %s model' % (num_runs, first_average,
+    #                               'Adapter' if use_adapters else 'Separate networks'), colors,
+    #                               'Epoch', 'Metric value', vertical_lines_x[:-1], min_y, 100)
 
     # save only values at the end of task learning (at vertical lines), both mean and std
     end_performance = {i: {'acc': 0, 'auroc': 0, 'auprc': 0, 'std_acc': 0, 'std_auroc': 0, 'std_auprc': 0}
                        for i in range(num_tasks)}
 
     for i in range(num_tasks):
-        if do_early_stopping:
-            index = i
-        else:
-            ver_lines = vertical_lines_x
-            index = ver_lines[i]
-
+        index = i
         end_performance[i]['acc'] = mean_acc[index]
         end_performance[i]['auroc'] = mean_auroc[index]
         end_performance[i]['auprc'] = mean_auprc[index]
