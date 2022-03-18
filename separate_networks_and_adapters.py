@@ -8,23 +8,32 @@ from torch.utils.data import TensorDataset
 
 
 if __name__ == '__main__':
+    adapter_trainable_layers = ["transformer_encoder.layers.0.layer_norm_trainable.weight",
+                                "transformer_encoder.layers.0.layer_norm_trainable.bias",
+                                "transformer_encoder.layers.0.adapter_layer.bottleneck_mlp.0.weight",
+                                "transformer_encoder.layers.0.adapter_layer.bottleneck_mlp.0.bias",
+                                "transformer_encoder.layers.0.adapter_layer.bottleneck_mlp.2.weight",
+                                "transformer_encoder.layers.0.adapter_layer.bottleneck_mlp.2.bias",
+                                "mlp.2.weight", "mlp.2.bias"]
+
     first_average = 'average'     # show 'average' results until current task
 
-    use_adapters = False      # if True use adapters, else use separate transformer networks for each task (upper bound)
+    use_adapters = True      # if True use adapters, else use separate transformer networks for each task (upper bound)
     input_size = 32
     num_heads = 4
     num_layers = 1      # number of transformer encoder layers
     dim_feedforward = 1024
     num_classes = 2
+    bottleneck_size = 16    # only used with adapters
     standardize_input = False
     restore_best_auroc = False
     do_early_stopping = True
     stopping_criteria = 'auroc'  # possibilities: 'acc', 'auroc', 'auprc'
 
     batch_size = 128
-    num_runs = 2
+    num_runs = 1
     num_tasks = 6
-    num_epochs = 10
+    num_epochs = 500 if use_adapters else 10
     learning_rate = 0.001
 
     # Permutations are only available for the first 3 tasks
@@ -60,12 +69,18 @@ if __name__ == '__main__':
         all_tasks_test_data = []
         task_epochs = []
 
+        if use_adapters:
+            model = AdapterTransformer(input_size, num_heads, num_layers, dim_feedforward, num_classes, bottleneck_size).to(device)
+
+            for name, params in model.named_parameters():
+                if name not in adapter_trainable_layers:
+                    params.requires_grad = False
+                print('Requires_grad: %s,  layer name: "%s"' % (str(params.requires_grad), name))
+
         for t in range(num_tasks):
             print('- Task %d -' % (t + 1))
 
-            if use_adapters:
-                model = None  # todo: adapter network
-            else:
+            if not use_adapters:
                 model = MyTransformer(input_size, num_heads, num_layers, dim_feedforward, num_classes).to(device)
 
             if t == 0:
@@ -132,10 +147,7 @@ if __name__ == '__main__':
                         batch_y = batch_y.cuda()
                         batch_mask = batch_mask.cuda()
 
-                    if use_adapters:
-                        outputs = model.forward(batch_X, batch_mask)    # todo: for adapters
-                    else:
-                        outputs = model.forward(batch_X, batch_mask)
+                    outputs = model.forward(batch_X, batch_mask)
 
                     optimizer.zero_grad()
                     loss = criterion(outputs, batch_y)
@@ -152,10 +164,7 @@ if __name__ == '__main__':
                             batch_X = batch_X.cuda()
                             batch_mask = batch_mask.cuda()
 
-                        if use_adapters:
-                            outputs = model.forward(batch_X, batch_mask)  # todo: for adapters
-                        else:
-                            outputs = model.forward(batch_X, batch_mask)
+                        outputs = model.forward(batch_X, batch_mask)
 
                         val_outputs.append(outputs)
 
@@ -213,10 +222,7 @@ if __name__ == '__main__':
                         batch_X = batch_X.cuda()
                         batch_mask = batch_mask.cuda()
 
-                    if use_adapters:
-                        outputs = model.forward(batch_X, batch_mask)  # todo: for adapters
-                    else:
-                        outputs = model.forward(batch_X, batch_mask)
+                    outputs = model.forward(batch_X, batch_mask)
 
                     test_outputs.append(outputs)
 
