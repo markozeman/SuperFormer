@@ -18,7 +18,8 @@ if __name__ == '__main__':
 
     first_average = 'average'     # show 'average' results until current task
 
-    use_adapters = True      # if True use adapters, else use separate transformer networks for each task (upper bound)
+    # method options: 'adapters', 'upper bound' (use separate transformer networks for each task), 'lower bound' (use single transformer network for all tasks)
+    method = 'lower bound'
     input_size = 32
     num_heads = 4
     num_layers = 1      # number of transformer encoder layers
@@ -31,9 +32,9 @@ if __name__ == '__main__':
     stopping_criteria = 'auroc'  # possibilities: 'acc', 'auroc', 'auprc'
 
     batch_size = 128
-    num_runs = 1
+    num_runs = 2
     num_tasks = 6
-    num_epochs = 500 if use_adapters else 10
+    num_epochs = 500 if method == 'adapters' else 10
     learning_rate = 0.001
 
     # Permutations are only available for the first 3 tasks
@@ -69,22 +70,24 @@ if __name__ == '__main__':
         all_tasks_test_data = []
         task_epochs = []
 
-        if use_adapters:
+        if method == 'adapters':
             model = AdapterTransformer(input_size, num_heads, num_layers, dim_feedforward, num_classes, bottleneck_size).to(device)
 
             for name, params in model.named_parameters():
                 if name not in adapter_trainable_layers:
                     params.requires_grad = False
                 print('Requires_grad: %s,  layer name: "%s"' % (str(params.requires_grad), name))
+        elif method == 'lower bound':
+            model = MyTransformer(input_size, num_heads, num_layers, dim_feedforward, num_classes).to(device)
 
         for t in range(num_tasks):
             print('- Task %d -' % (t + 1))
 
-            if not use_adapters:
+            if method == 'upper bound':
                 model = MyTransformer(input_size, num_heads, num_layers, dim_feedforward, num_classes).to(device)
 
-            if t == 0:
-                print(model)
+                if t == 0:
+                    print(model)
 
             criterion = torch.nn.CrossEntropyLoss().cuda()
 
@@ -301,25 +304,35 @@ if __name__ == '__main__':
     else:
         vertical_lines_x = [((i + 1) * num_epochs) - 1 for i in range(num_tasks)]
 
-    acc_arr_average = [[sum(row[:i+1]) / (i+1) for i in range(len(row))] for row in acc_arr]
-    auroc_arr_average = [[sum(row[:i+1]) / (i+1) for i in range(len(row))] for row in auroc_arr]
-    auprc_arr_average = [[sum(row[:i+1]) / (i+1) for i in range(len(row))] for row in auprc_arr]
-    mean_acc, std_acc = np.mean(acc_arr_average, axis=0), np.std(acc_arr_average, axis=0)
-    mean_auroc, std_auroc = np.mean(auroc_arr_average, axis=0), np.std(auroc_arr_average, axis=0)
-    mean_auprc, std_auprc = np.mean(auprc_arr_average, axis=0), np.std(auprc_arr_average, axis=0)
+    if method == 'lower bound':
+        acc_epoch_no0 = remove_empty_values(acc_epoch, num_tasks, num_epochs)
+        auroc_epoch_no0 = remove_empty_values(auroc_epoch, num_tasks, num_epochs)
+        auprc_epoch_no0 = remove_empty_values(auprc_epoch, num_tasks, num_epochs)
+
+        # display mean and standard deviation per epoch
+        mean_acc, std_acc = np.mean(acc_epoch_no0, axis=0), np.std(acc_epoch_no0, axis=0)
+        mean_auroc, std_auroc = np.mean(auroc_epoch_no0, axis=0), np.std(auroc_epoch_no0, axis=0)
+        mean_auprc, std_auprc = np.mean(auprc_epoch_no0, axis=0), np.std(auprc_epoch_no0, axis=0)
+    else:
+        acc_arr_average = [[sum(row[:i+1]) / (i+1) for i in range(len(row))] for row in acc_arr]
+        auroc_arr_average = [[sum(row[:i+1]) / (i+1) for i in range(len(row))] for row in auroc_arr]
+        auprc_arr_average = [[sum(row[:i+1]) / (i+1) for i in range(len(row))] for row in auprc_arr]
+        mean_acc, std_acc = np.mean(acc_arr_average, axis=0), np.std(acc_arr_average, axis=0)
+        mean_auroc, std_auroc = np.mean(auroc_arr_average, axis=0), np.std(auroc_arr_average, axis=0)
+        mean_auprc, std_auprc = np.mean(auprc_arr_average, axis=0), np.std(auprc_arr_average, axis=0)
 
     # if (not do_early_stopping) or (do_early_stopping and num_runs == 1):
     #     if show_only_accuracy:
     #         plot_multiple_results(num_tasks, num_epochs, first_average,
     #                               [mean_acc], [std_acc], ['Accuracy'],
     #                               '#runs: %d, %s task results, %s model' % (num_runs, first_average,
-    #                               'Adapter' if use_adapters else 'Separate networks'), colors[0],
+    #                               'Adapter' if method == 'adapters' else 'Separate networks'), colors[0],
     #                               'Epoch', 'Accuracy (%)', vertical_lines_x[:-1], min_y, 100)
     #     else:   # show all three metrics
     #         plot_multiple_results(num_tasks, num_epochs, first_average,
     #                               [mean_acc, mean_auroc, mean_auprc], [std_acc, std_auroc, std_auprc], ['Accuracy', 'AUROC', 'AUPRC'],
     #                               '#runs: %d, %s task results, %s model' % (num_runs, first_average,
-    #                               'Adapter' if use_adapters else 'Separate networks'), colors,
+    #                               'Adapter' if  method == 'adapters' else 'Separate networks'), colors,
     #                               'Epoch', 'Metric value', vertical_lines_x[:-1], min_y, 100)
 
     # save only values at the end of task learning (at vertical lines), both mean and std
@@ -338,8 +351,8 @@ if __name__ == '__main__':
     metrics = ['acc', 'auroc', 'auprc']    # possibilities: 'acc', 'auroc', 'auprc'
     print('Metrics at the end of each task training:\n', end_performance)
     plot_multiple_histograms(end_performance, num_tasks, metrics,
-                             '#runs: %d, %s task results, %s model, %s' % (num_runs, first_average,
-                             'Adapter' if use_adapters else 'Separate networks', 'ES on %s' % stopping_criteria if do_early_stopping else 'no ES'),
+                             '#runs: %d, %s task results, %s model, %s' % (num_runs, first_average, method,
+                             'ES on %s' % stopping_criteria if do_early_stopping else 'no ES'),
                              colors[:len(metrics)], 'Metric value', min_y)
 
 
