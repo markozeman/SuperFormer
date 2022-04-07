@@ -19,7 +19,7 @@ if __name__ == '__main__':
     first_average = 'average'     # show 'average' results until current task
 
     # method options: 'adapters', 'upper bound' (use separate transformer networks for each task), 'lower bound' (use single transformer network for all tasks)
-    method = 'lower bound'
+    method = 'adapters'
     input_size = 32
     num_heads = 4
     num_layers = 1      # number of transformer encoder layers
@@ -76,7 +76,7 @@ if __name__ == '__main__':
             for name, params in model.named_parameters():
                 if name not in adapter_trainable_layers:
                     params.requires_grad = False
-                print('Requires_grad: %s,  layer name: "%s"' % (str(params.requires_grad), name))
+                print('Requires_grad: %s,  layer name: "%s", number of layer parameters: %d' % (str(params.requires_grad), name, params.numel()))
         elif method == 'lower bound':
             model = MyTransformer(input_size, num_heads, num_layers, dim_feedforward, num_classes).to(device)
 
@@ -253,9 +253,9 @@ if __name__ == '__main__':
     epochs_per_run = np.array(task_epochs_all) + 1    # +1 to be consistent with CL benchmarks
     print('\nEpochs per run: ', epochs_per_run)
     print('Times per run: ', times_per_run)
-    print('Runs: %d,  Average time per run: %.2f +/ %.2f s' %
-          (num_runs, np.mean(np.array(times_per_run)), np.std(np.array(times_per_run))))
-    print('Runs: %d,  Average #epochs for all tasks: %.2f +/ %.2f\n' %
+    print('Runs: %d,  Average time per run: %.2f +/- %.2f s, %.1f +/- %.1f min' %
+          (num_runs, np.mean(np.array(times_per_run)), np.std(np.array(times_per_run)), np.mean(np.array(times_per_run)) / 60, np.std(np.array(times_per_run)) / 60))
+    print('Runs: %d,  Average #epochs for all tasks: %.2f +/- %.2f\n' %
           (num_runs, np.mean(np.array([sum(l) for l in epochs_per_run])), np.std(np.array([sum(l) for l in epochs_per_run]))))
 
     # display mean and standard deviation per task

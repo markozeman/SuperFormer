@@ -1,4 +1,6 @@
 import time
+import torch
+import random
 import numpy as np
 from help_functions import *
 from models import *
@@ -8,6 +10,11 @@ from torchinfo import summary
 from sklearn.metrics import roc_auc_score, classification_report, confusion_matrix
 from sklearn.preprocessing import StandardScaler
 from torch.utils.data import TensorDataset
+
+seed = 50
+torch.manual_seed(seed)
+random.seed(seed)
+np.random.seed(seed)
 
 
 if __name__ == '__main__':
@@ -28,20 +35,26 @@ if __name__ == '__main__':
     stopping_criteria = 'auroc'  # possibilities: 'acc', 'auroc', 'auprc'
 
     batch_size = 128
-    num_runs = 2
+    num_runs = 5
     num_tasks = 6
-    num_epochs = 10
+    num_epochs = 50
     learning_rate = 0.001
 
-    # Permutations are only available for the first 3 tasks
-    permutations = [['HS', 'SA', 'S'],
-                    ['HS', 'S', 'SA'],
-                    ['SA', 'HS', 'S'],
-                    ['SA', 'S', 'HS'],
-                    ['S', 'HS', 'SA'],
-                    ['S', 'SA', 'HS']]
-    permutation_index = 0
-    task_names = permutations[permutation_index] + ['SA_2', 'C', 'HD']
+    # # Permutations are only available for the first 3 tasks
+    # permutations = [['HS', 'SA', 'S'],
+    #                 ['HS', 'S', 'SA'],
+    #                 ['SA', 'HS', 'S'],
+    #                 ['SA', 'S', 'HS'],
+    #                 ['S', 'HS', 'SA'],
+    #                 ['S', 'SA', 'HS']]
+    # permutation_index = 0
+    # task_names = permutations[permutation_index] + ['SA_2', 'C', 'HD']
+
+    task_names = [['HS', 'SA', 'S', 'SA_2', 'C', 'HD'],
+                  ['C', 'HD', 'SA', 'HS', 'SA_2', 'S'],
+                  ['SA', 'S', 'HS', 'SA_2', 'HD', 'C'],
+                  ['HD', 'SA_2', 'SA', 'C', 'S', 'HS'],
+                  ['SA', 'HS', 'C', 'SA_2', 'HD', 'S']]
 
     # # save X, y, mask for all 6 datasets
     # X, y, mask = preprocess_hate_speech('datasets/hate_speech.csv')
@@ -100,6 +113,7 @@ if __name__ == '__main__':
     for r in range(num_runs):
         print('- - Run %d - -' % (r + 1))
 
+        np.random.seed(seed)
         start_time = time.time()
 
         if use_MLP:
@@ -133,7 +147,7 @@ if __name__ == '__main__':
             best_auroc_val = 0
 
             # prepare data
-            X, y, mask = get_data(task_names[t])
+            X, y, mask = get_data(task_names[r][t])
 
             if standardize_input:
                 for i in range(X.shape[0]):
@@ -263,6 +277,17 @@ if __name__ == '__main__':
                     else:
                         outputs = model.forward(batch_X, batch_mask)
 
+                    '''
+                    # majority classifier
+                    num_zeros = (y_test == 0.).sum().item()
+                    num_ones = (y_test == 1.).sum().item()
+                    outputs = torch.zeros(batch_X.size()[0], 2)
+                    if num_zeros >= num_ones:
+                        outputs[:, 0] = torch.ones(batch_X.size()[0])
+                    else:
+                        outputs[:, 1] = torch.ones(batch_X.size()[0])
+                    '''
+
                     test_outputs.append(outputs)
 
                 test_acc, test_auroc, test_auprc = get_stats(test_outputs, y_test)
@@ -303,6 +328,16 @@ if __name__ == '__main__':
     mean_auroc, std_auroc = np.mean(auroc_arr, axis=0), np.std(auroc_arr, axis=0)
     mean_auprc, std_auprc = np.mean(auprc_arr, axis=0), np.std(auprc_arr, axis=0)
 
+    '''
+    # majority classifier
+    run_mean_acc = np.mean(acc_arr, axis=1)
+    run_mean_auroc = np.mean(auroc_arr, axis=1)
+    run_mean_auprc = np.mean(auprc_arr, axis=1)
+    print('Majority classifier average after all tasks: \nAccuracy: %.1f +/- %.1f\nAUROC: %.1f +/- %.1f\nAUPRC: %.1f +/- %.1f'
+          % (np.mean(run_mean_acc), np.std(run_mean_acc), np.mean(run_mean_auroc), np.std(run_mean_auroc), np.mean(run_mean_auprc), np.std(run_mean_auprc)))
+    '''
+
+    '''
     for t in range(num_tasks):
         if t == 0:
             # s = 'Hate speech'
@@ -331,6 +366,7 @@ if __name__ == '__main__':
         print('%s - Accuracy = %.1f +/- %.1f' % (s, mean_acc[t], std_acc[t]))
         print('%s - AUROC    = %.1f +/- %.1f' % (s, mean_auroc[t], std_auroc[t]))
         print('%s - AUPRC    = %.1f +/- %.1f' % (s, mean_auprc[t], std_auprc[t]))
+    '''
 
     show_only_accuracy = False
     min_y = 50
