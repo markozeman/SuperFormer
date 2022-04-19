@@ -149,6 +149,7 @@ class AdapterTransformerEncoderLayer(nn.Module):
         self.activation = activation
 
         self.adapter_layer = AdapterLayer(input_size, bottleneck_size)
+        # self.adapter_layer = AdapterLayer1to1(input_size)
 
     def self_attention_block(self, input, key_padding_mask):
         x = self.self_attn(input, input, input, key_padding_mask=key_padding_mask, need_weights=False)[0]
@@ -171,13 +172,28 @@ class AdapterLayer(nn.Module):
         super(AdapterLayer, self).__init__()
 
         self.bottleneck_mlp = nn.Sequential(
-            nn.Linear(input_size, bottleneck_size),  # 32 -> 16
+            nn.Linear(input_size, bottleneck_size),  # 32 -> bottleneck_size
             nn.ReLU(),
-            nn.Linear(bottleneck_size, input_size),  # 16 -> 32
+            nn.Linear(bottleneck_size, input_size),  # bottleneck_size -> 32
         )
 
     def forward(self, input):
         x = self.bottleneck_mlp(input)
         output = x + input
         return output
+
+
+class AdapterLayer1to1(nn.Module):
+
+    def __init__(self, input_size):
+        super(AdapterLayer1to1, self).__init__()
+
+        self.one2one = nn.Linear(input_size, input_size)
+        self.one2one.weight = torch.nn.Parameter(torch.randn(input_size, 1, requires_grad=True), requires_grad=True)
+        self.one2one.bias = torch.nn.Parameter(torch.zeros(input_size, requires_grad=False), requires_grad=False)   # bias not used
+
+    def forward(self, input):
+        return self.one2one(input)
+
+
 

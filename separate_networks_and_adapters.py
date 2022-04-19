@@ -14,6 +14,7 @@ if __name__ == '__main__':
                                 "transformer_encoder.layers.0.adapter_layer.bottleneck_mlp.0.bias",
                                 "transformer_encoder.layers.0.adapter_layer.bottleneck_mlp.2.weight",
                                 "transformer_encoder.layers.0.adapter_layer.bottleneck_mlp.2.bias",
+                                "transformer_encoder.layers.0.adapter_layer.one2one.weight",
                                 "mlp.2.weight", "mlp.2.bias"]
 
     first_average = 'average'     # show 'average' results until current task
@@ -34,18 +35,24 @@ if __name__ == '__main__':
     batch_size = 128
     num_runs = 2
     num_tasks = 6
-    num_epochs = 500 if method == 'adapters' else 10
+    num_epochs = 500 if method == 'adapters' else 50
     learning_rate = 0.001
 
-    # Permutations are only available for the first 3 tasks
-    permutations = [['HS', 'SA', 'S'],
-                    ['HS', 'S', 'SA'],
-                    ['SA', 'HS', 'S'],
-                    ['SA', 'S', 'HS'],
-                    ['S', 'HS', 'SA'],
-                    ['S', 'SA', 'HS']]
-    permutation_index = 0
-    task_names = permutations[permutation_index] + ['SA_2', 'C', 'HD']
+    # # Permutations are only available for the first 3 tasks
+    # permutations = [['HS', 'SA', 'S'],
+    #                 ['HS', 'S', 'SA'],
+    #                 ['SA', 'HS', 'S'],
+    #                 ['SA', 'S', 'HS'],
+    #                 ['S', 'HS', 'SA'],
+    #                 ['S', 'SA', 'HS']]
+    # permutation_index = 0
+    # task_names = permutations[permutation_index] + ['SA_2', 'C', 'HD']
+
+    task_names = [['HS', 'SA', 'S', 'SA_2', 'C', 'HD'],
+                  ['C', 'HD', 'SA', 'HS', 'SA_2', 'S'],
+                  ['SA', 'S', 'HS', 'SA_2', 'HD', 'C'],
+                  ['HD', 'SA_2', 'SA', 'C', 'S', 'HS'],
+                  ['SA', 'HS', 'C', 'SA_2', 'HD', 'S']]
 
     # Train model for 'num_runs' runs for 'num_tasks' tasks
     acc_arr = np.zeros((num_runs, num_tasks))
@@ -106,7 +113,7 @@ if __name__ == '__main__':
             best_auroc_val = 0
 
             # prepare data
-            X, y, mask = get_data(task_names[t])
+            X, y, mask = get_data(task_names[r][t])
 
             if standardize_input:
                 for i in range(X.shape[0]):
@@ -263,6 +270,7 @@ if __name__ == '__main__':
     mean_auroc, std_auroc = np.mean(auroc_arr, axis=0), np.std(auroc_arr, axis=0)
     mean_auprc, std_auprc = np.mean(auprc_arr, axis=0), np.std(auprc_arr, axis=0)
 
+    '''
     for t in range(num_tasks):
         if t == 0:
             # s = 'Hate speech'
@@ -291,6 +299,7 @@ if __name__ == '__main__':
         print('%s - Accuracy = %.1f +/- %.1f' % (s, mean_acc[t], std_acc[t]))
         print('%s - AUROC    = %.1f +/- %.1f' % (s, mean_auroc[t], std_auroc[t]))
         print('%s - AUPRC    = %.1f +/- %.1f' % (s, mean_auprc[t], std_auprc[t]))
+    '''
 
     show_only_accuracy = False
     min_y = 50

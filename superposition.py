@@ -60,7 +60,7 @@ def context_multiplication(model, contexts, layer_dimension, task_index):
 
     :param model: torch model instance
     :param contexts: binary context vectors (shape=(num_tasks-1, num of model layers))
-    :param layer_dimension: list of 0 (first dimension taken for context size) and 1 (second dimension taken)
+    :param layer_dimension: list of 0 (first dimension taken for context size), 1 (second dimension taken), 2 (element-wise)
     :param task_index: index of the current task, which has finished learning
     :return: None (but model parameters are updated)
     """
@@ -79,7 +79,7 @@ def context_multiplication(model, contexts, layer_dimension, task_index):
                                                                  newshape=(params.size()[0], params.size()[1])).astype(np.float32)).cuda()
                     new_params = params * context_matrix
                 else:
-                    raise ValueError('Layer index must be 0 or 1.')
+                    raise ValueError('Layer index must be 0, 1 or 2.')
 
                 params.copy_(new_params)
 
