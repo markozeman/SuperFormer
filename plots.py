@@ -31,7 +31,13 @@ def plot_multiple_histograms(data, num_tasks, metrics, title, colors, y_label, y
     :param y_min: minimum y value
     :return: None
     """
-    font = {'size': 15}
+    metrics_names = {
+        'acc': 'Accuracy',
+        'auroc': 'AUROC',
+        'auprc': 'AUPRC'
+    }
+
+    font = {'size': 20}
     plt.rc('font', **font)
     plt.grid(axis='y')
 
@@ -40,20 +46,20 @@ def plot_multiple_histograms(data, num_tasks, metrics, title, colors, y_label, y
         heights = [data[i][m] for i in range(num_tasks)]
         x_pos = [(n * len(metrics)) + (i * bar_width) for n in range(num_tasks)]
         plt.bar(x_pos, heights, width=bar_width, color=colors[i], edgecolor='black',
-                yerr=[data[i]['std_' + m] for i in range(num_tasks)], capsize=7, label=m)
+                yerr=[data[i]['std_' + m] for i in range(num_tasks)], capsize=7, label=metrics_names[m])
 
-        # plot numbers of mean (height) on every bar
-        for j, x in enumerate(x_pos):
-            plt.text(x - 0.2, y_min + 1, round(heights[j], 1), {'size': 10})
+        # # plot numbers of mean (height) on every bar
+        # for j, x in enumerate(x_pos):
+        #     plt.text(x - 0.2, y_min + 1, round(heights[j], 1), {'size': 10})
 
     ax = plt.gca()
     ax.set_ylim([y_min, 100])
 
     plt.xticks([(i * len(metrics)) + (math.floor(len(metrics) / 2) * bar_width) for i in range(num_tasks)],
-               ['Task %d' % (i+1) for i in range(num_tasks)])
+               ['Task 1' if i == 0 else 'Task 1-%d' % (i+1) for i in range(num_tasks)])
 
     plt.ylabel(y_label)
-    plt.title(title)
+    # plt.title(title)
     plt.legend()
     plt.show()
 

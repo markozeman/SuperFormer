@@ -18,9 +18,11 @@ if __name__ == '__main__':
                                 "mlp.2.weight", "mlp.2.bias"]
 
     first_average = 'average'     # show 'average' results until current task
+    use_MLP = False
+    use_mask = False
 
     # method options: 'adapters', 'upper bound' (use separate transformer networks for each task), 'lower bound' (use single transformer network for all tasks)
-    method = 'adapters'
+    method = 'upper bound'
     input_size = 32
     num_heads = 4
     num_layers = 1      # number of transformer encoder layers
@@ -85,13 +87,19 @@ if __name__ == '__main__':
                     params.requires_grad = False
                 print('Requires_grad: %s,  layer name: "%s", number of layer parameters: %d' % (str(params.requires_grad), name, params.numel()))
         elif method == 'lower bound':
-            model = MyTransformer(input_size, num_heads, num_layers, dim_feedforward, num_classes).to(device)
+            if use_MLP:
+                model = MLP(input_size, num_classes).to(device)
+            else:
+                model = MyTransformer(input_size, num_heads, num_layers, dim_feedforward, num_classes).to(device)
 
         for t in range(num_tasks):
             print('- Task %d -' % (t + 1))
 
             if method == 'upper bound':
-                model = MyTransformer(input_size, num_heads, num_layers, dim_feedforward, num_classes).to(device)
+                if use_MLP:
+                    model = MLP(input_size, num_classes).to(device)
+                else:
+                    model = MyTransformer(input_size, num_heads, num_layers, dim_feedforward, num_classes).to(device)
 
                 if t == 0:
                     print(model)
@@ -157,7 +165,13 @@ if __name__ == '__main__':
                         batch_y = batch_y.cuda()
                         batch_mask = batch_mask.cuda()
 
-                    outputs = model.forward(batch_X, batch_mask)
+                        if not use_mask:
+                            batch_mask = None
+
+                    if use_MLP:
+                        outputs = model.forward(batch_X)
+                    else:
+                        outputs = model.forward(batch_X, batch_mask)
 
                     optimizer.zero_grad()
                     loss = criterion(outputs, batch_y)
@@ -174,7 +188,13 @@ if __name__ == '__main__':
                             batch_X = batch_X.cuda()
                             batch_mask = batch_mask.cuda()
 
-                        outputs = model.forward(batch_X, batch_mask)
+                            if not use_mask:
+                                batch_mask = None
+
+                        if use_MLP:
+                            outputs = model.forward(batch_X)
+                        else:
+                            outputs = model.forward(batch_X, batch_mask)
 
                         val_outputs.append(outputs)
 
@@ -201,8 +221,10 @@ if __name__ == '__main__':
                     else:   # stop training
                         print('Early stopped - %s got worse in this epoch.' % stopping_criteria)
                         task_epochs.append(epoch)
+
                         acc_e, auroc_e, auprc_e = evaluate_results(model, None, None, all_tasks_test_data,
-                                                                   False, t, first_average, False, batch_size)
+                                                                   False, t, first_average, use_MLP, batch_size)
+
                         acc_epoch[r, (t * num_epochs) + epoch] = acc_e
                         auroc_epoch[r, (t * num_epochs) + epoch] = auroc_e
                         auprc_epoch[r, (t * num_epochs) + epoch] = auprc_e
@@ -212,7 +234,7 @@ if __name__ == '__main__':
                 if epoch == num_epochs - 1:   # calculate results for each epoch or only the last epoch in task
                     task_epochs.append(epoch)
                     acc_e, auroc_e, auprc_e = evaluate_results(model, None, None, all_tasks_test_data,
-                                                               False, t, first_average, False, batch_size)
+                                                                False, t, first_average, use_MLP, batch_size)
                 else:
                     acc_e, auroc_e, auprc_e = 0, 0, 0
 
@@ -232,7 +254,13 @@ if __name__ == '__main__':
                         batch_X = batch_X.cuda()
                         batch_mask = batch_mask.cuda()
 
-                    outputs = model.forward(batch_X, batch_mask)
+                        if not use_mask:
+                            batch_mask = None
+
+                    if use_MLP:
+                        outputs = model.forward(batch_X)
+                    else:
+                        outputs = model.forward(batch_X, batch_mask)
 
                     test_outputs.append(outputs)
 

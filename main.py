@@ -11,10 +11,10 @@ from sklearn.metrics import roc_auc_score, classification_report, confusion_matr
 from sklearn.preprocessing import StandardScaler
 from torch.utils.data import TensorDataset
 
-seed = 50
-torch.manual_seed(seed)
-random.seed(seed)
-np.random.seed(seed)
+# seed = 50
+# torch.manual_seed(seed)
+# random.seed(seed)
+# np.random.seed(seed)
 
 
 if __name__ == '__main__':
@@ -22,7 +22,8 @@ if __name__ == '__main__':
     superposition_each_epoch = False
     first_average = 'average'     # show results on 'first' task or the 'average' results until current task
 
-    use_MLP = False      # if True use MLP, else use Transformer
+    use_MLP = True      # if True use MLP, else use Transformer
+    use_mask = False     # if True use masking in Transformer, else do not use masks
     input_size = 32
     num_heads = 4
     num_layers = 1      # number of transformer encoder layers
@@ -35,7 +36,7 @@ if __name__ == '__main__':
     stopping_criteria = 'auroc'  # possibilities: 'acc', 'auroc', 'auprc'
 
     batch_size = 128
-    num_runs = 5
+    num_runs = 2
     num_tasks = 6
     num_epochs = 50
     learning_rate = 0.001
@@ -113,7 +114,7 @@ if __name__ == '__main__':
     for r in range(num_runs):
         print('- - Run %d - -' % (r + 1))
 
-        np.random.seed(seed)
+        # np.random.seed(seed)
         start_time = time.time()
 
         if use_MLP:
@@ -191,6 +192,9 @@ if __name__ == '__main__':
                         batch_y = batch_y.cuda()
                         batch_mask = batch_mask.cuda()
 
+                        if not use_mask:
+                            batch_mask = None
+
                     if use_MLP:
                         outputs = model.forward(batch_X)
                     else:
@@ -210,6 +214,9 @@ if __name__ == '__main__':
                         if torch.cuda.is_available():
                             batch_X = batch_X.cuda()
                             batch_mask = batch_mask.cuda()
+
+                            if not use_mask:
+                                batch_mask = None
 
                         if use_MLP:
                             outputs = model.forward(batch_X)
@@ -271,6 +278,9 @@ if __name__ == '__main__':
                     if torch.cuda.is_available():
                         batch_X = batch_X.cuda()
                         batch_mask = batch_mask.cuda()
+
+                        if not use_mask:
+                            batch_mask = None
 
                     if use_MLP:
                         outputs = model.forward(batch_X)
