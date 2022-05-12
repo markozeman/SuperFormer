@@ -22,8 +22,9 @@ if __name__ == '__main__':
     superposition_each_epoch = False
     first_average = 'average'     # show results on 'first' task or the 'average' results until current task
 
-    use_MLP = True      # if True use MLP, else use Transformer
+    use_MLP = False      # if True use MLP, else use Transformer
     use_mask = False     # if True use masking in Transformer, else do not use masks
+    use_PSP = True
     input_size = 32
     num_heads = 4
     num_layers = 1      # number of transformer encoder layers
@@ -36,7 +37,7 @@ if __name__ == '__main__':
     stopping_criteria = 'auroc'  # possibilities: 'acc', 'auroc', 'auprc'
 
     batch_size = 128
-    num_runs = 2
+    num_runs = 1
     num_tasks = 6
     num_epochs = 50
     learning_rate = 0.001
@@ -118,14 +119,14 @@ if __name__ == '__main__':
         start_time = time.time()
 
         if use_MLP:
-            model = MLP(input_size, num_classes).to(device)
+            model = MLP(input_size, num_classes, use_PSP).to(device)
         else:
-            model = MyTransformer(input_size, num_heads, num_layers, dim_feedforward, num_classes).to(device)
+            model = MyTransformer(input_size, num_heads, num_layers, dim_feedforward, num_classes, use_PSP).to(device)
 
         print(model)
 
         all_tasks_test_data = []
-        contexts, layer_dimension = create_context_vectors(model, num_tasks, element_wise)
+        contexts, layer_dimension = create_context_vectors(model, num_tasks, element_wise, use_PSP)
         task_epochs = []
 
         for t in range(num_tasks):
@@ -195,10 +196,7 @@ if __name__ == '__main__':
                         if not use_mask:
                             batch_mask = None
 
-                    if use_MLP:
-                        outputs = model.forward(batch_X)
-                    else:
-                        outputs = model.forward(batch_X, batch_mask)
+                    outputs = get_model_outputs(model, batch_X, batch_mask, use_MLP, use_PSP, contexts, t)
 
                     optimizer.zero_grad()
                     loss = criterion(outputs, batch_y)
@@ -218,10 +216,7 @@ if __name__ == '__main__':
                             if not use_mask:
                                 batch_mask = None
 
-                        if use_MLP:
-                            outputs = model.forward(batch_X)
-                        else:
-                            outputs = model.forward(batch_X, batch_mask)
+                        outputs = get_model_outputs(model, batch_X, batch_mask, use_MLP, use_PSP, contexts, t)
 
                         val_outputs.append(outputs)
 
@@ -249,7 +244,7 @@ if __name__ == '__main__':
                         print('Early stopped - %s got worse in this epoch.' % stopping_criteria)
                         task_epochs.append(epoch)
                         acc_e, auroc_e, auprc_e = evaluate_results(model, contexts, layer_dimension, all_tasks_test_data,
-                                                                   superposition, t, first_average, use_MLP, batch_size)
+                                                                   superposition, t, first_average, use_MLP, batch_size, use_PSP)
                         acc_epoch[r, (t * num_epochs) + epoch] = acc_e
                         auroc_epoch[r, (t * num_epochs) + epoch] = auroc_e
                         auprc_epoch[r, (t * num_epochs) + epoch] = auprc_e
@@ -259,7 +254,7 @@ if __name__ == '__main__':
                 if superposition_each_epoch or (epoch == num_epochs - 1):   # calculate results for each epoch or only the last epoch in task
                     task_epochs.append(epoch)
                     acc_e, auroc_e, auprc_e = evaluate_results(model, contexts, layer_dimension, all_tasks_test_data,
-                                                               superposition, t, first_average, use_MLP, batch_size)
+                                                               superposition, t, first_average, use_MLP, batch_size, use_PSP)
                 else:
                     acc_e, auroc_e, auprc_e = 0, 0, 0
 
@@ -282,10 +277,7 @@ if __name__ == '__main__':
                         if not use_mask:
                             batch_mask = None
 
-                    if use_MLP:
-                        outputs = model.forward(batch_X)
-                    else:
-                        outputs = model.forward(batch_X, batch_mask)
+                    outputs = get_model_outputs(model, batch_X, batch_mask, use_MLP, use_PSP, contexts, t)
 
                     '''
                     # majority classifier
@@ -314,7 +306,7 @@ if __name__ == '__main__':
             auroc_arr[r, t] = test_auroc * 100
             auprc_arr[r, t] = test_auprc * 100
 
-            if superposition:   # perform context multiplication
+            if superposition and not use_PSP:   # perform context multiplication
                 if t < num_tasks - 1:   # do not multiply with contexts at the end of last task
                     context_multiplication(model, contexts, layer_dimension, t)
 
@@ -328,8 +320,9 @@ if __name__ == '__main__':
     epochs_per_run = np.array(task_epochs_all) + 1    # +1 to be consistent with CL benchmarks
     print('\nEpochs per run: ', epochs_per_run)
     print('Times per run: ', times_per_run)
-    print('Runs: %d,  Average time per run: %.2f +/ %.2f s' %
-          (num_runs, np.mean(np.array(times_per_run)), np.std(np.array(times_per_run))))
+    print('Runs: %d,  Average time per run: %.2f +/- %.2f s, %.1f +/- %.1f min' %
+          (num_runs, np.mean(np.array(times_per_run)), np.std(np.array(times_per_run)),
+           np.mean(np.array(times_per_run)) / 60, np.std(np.array(times_per_run)) / 60))
     print('Runs: %d,  Average #epochs for all tasks: %.2f +/ %.2f\n' %
           (num_runs, np.mean(np.array([sum(l) for l in epochs_per_run])), np.std(np.array([sum(l) for l in epochs_per_run]))))
 

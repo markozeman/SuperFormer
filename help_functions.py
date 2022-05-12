@@ -62,3 +62,28 @@ def remove_empty_values(metric_epoch, num_tasks, num_epochs):
         epoch_no0.append(epoch_no0_row)
     return epoch_no0
 
+
+def get_model_outputs(model, batch_X, batch_mask, use_MLP, use_PSP, contexts, task_index):
+    """
+    Get model outputs with the forward pass of the batch of input data (batch_X).
+
+    :param model: torch model instance
+    :param batch_X: a batch of input data
+    :param batch_mask: a batch of input data masks if used
+    :param use_MLP: boolean - if True use MLP, else use Transformer
+    :param use_PSP: boolean - if True, PSP method is used, meaning we need set of contexts for each task (including the first)
+    :param contexts: contexts: binary context vectors
+    :param task_index: index of the current task, which is being learned
+    :return: batch model output
+    """
+    if use_PSP:
+        if use_MLP:
+            return model.forward(batch_X, use_PSP, contexts, task_index)
+        else:
+            return model.forward(batch_X, batch_mask, use_PSP, contexts, task_index)
+    else:
+        if use_MLP:
+            return model.forward(batch_X)
+        else:
+            return model.forward(batch_X, batch_mask)
+

@@ -17,7 +17,7 @@ def random_binary_array(size):
     return vec
 
 
-def create_context_vectors(model, num_tasks, element_wise):
+def create_context_vectors(model, num_tasks, element_wise, use_PSP=False):
     """
     Create random binary context vectors for all model layers.
     Return together with layer dimension side, which is a list of 0 (first dimension taken for context size)
@@ -26,11 +26,13 @@ def create_context_vectors(model, num_tasks, element_wise):
     :param model: torch model instance
     :param num_tasks: number of tasks
     :param element_wise: boolean - if True, the number of context values in self attention part is the same as number of parameters
+    :param use_PSP: boolean - if True, PSP method is used, meaning we need set of contexts for each task (including the first)
     :return: context_vectors (shape=(num_tasks-1, num of model layers)), layer_dimension (length=num of model layers)
     """
     context_vectors = []
     layer_dimension = []
-    for t in range(num_tasks-1):    # contexts only needed between tasks, i.e. len(contexts)=num_task-1
+    n = num_tasks if use_PSP else num_tasks - 1
+    for t in range(n):    # our contexts only needed between tasks, i.e. len(contexts)=num_task-1
         task_contexts = []
         for name, params in model.named_parameters():
             if name.endswith('weight'):     # only weight, not bias
@@ -85,14 +87,14 @@ def context_multiplication(model, contexts, layer_dimension, task_index):
                                                                      newshape=(params.size()[0], params.size()[1])).astype(np.float32)).cuda()
                         new_params = params * context_matrix
                     else:
-                        raise ValueError('Layer index must be 0, 1 or 2.')
+                        raise ValueError('Layer dimension must be 0, 1 or 2.')
 
                     params.copy_(new_params)
 
             layer_index += 1
 
 
-def evaluate_results(model, contexts, layer_dimension, all_tasks_test_data, superposition, task_index, first_average, use_MLP, batch_size):
+def evaluate_results(model, contexts, layer_dimension, all_tasks_test_data, superposition, task_index, first_average, use_MLP, batch_size, use_PSP=False):
     """
     Evaluate the results on test data with or without using superposition. Return accuracy, AUROC and AUPRC.
 
@@ -105,16 +107,17 @@ def evaluate_results(model, contexts, layer_dimension, all_tasks_test_data, supe
     :param first_average: string - show results on 'first' task only or the 'average' results until current task index
     :param use_MLP: boolean - if True use MLP, else use Transformer
     :param batch_size: batch size
+    :param use_PSP: boolean - if True, PSP method is used, meaning we need set of contexts for each task (including the first)
     :return: accuracy, AUROC, AUPRC
     """
     if superposition:   # superposition used
-        if first_average == 'first':
+        if first_average == 'first':    # not implemented for PSP
             # unfold network parameters to the first task
             for task_i in range(task_index - 1, -1, -1):
                 context_multiplication(model, contexts, layer_dimension, task_i)
 
             # evaluate the model on the first task
-            acc, auroc, auprc = evaluate_current_task(model, all_tasks_test_data, 0, use_MLP, batch_size)
+            acc, auroc, auprc = evaluate_current_task(model, all_tasks_test_data, 0, use_MLP)
 
             # restore model parameters to the old ones (before context multiplication)
             for task_i in range(task_index):
@@ -122,13 +125,16 @@ def evaluate_results(model, contexts, layer_dimension, all_tasks_test_data, supe
 
             return acc, auroc, auprc
         elif first_average == 'average':
-            return evaluate_tasks_average(model, all_tasks_test_data, contexts, layer_dimension,
-                                          superposition, task_index, use_MLP, batch_size)
+            if use_PSP:
+                return evaluate_tasks_average_PSP(model, all_tasks_test_data, contexts, layer_dimension, task_index, use_MLP)
+            else:
+                return evaluate_tasks_average(model, all_tasks_test_data, contexts, layer_dimension,
+                                              superposition, task_index, use_MLP, batch_size)
         else:
             raise ValueError('The value of "first_average" has to be string "first" or "average".')
     else:   # superposition not used
         if first_average == 'first':
-            return evaluate_current_task(model, all_tasks_test_data, 0, use_MLP, batch_size)
+            return evaluate_current_task(model, all_tasks_test_data, 0, use_MLP)
         elif first_average == 'average':
             return evaluate_tasks_average(model, all_tasks_test_data, contexts, layer_dimension,
                                           superposition, task_index, use_MLP, batch_size)
@@ -136,15 +142,14 @@ def evaluate_results(model, contexts, layer_dimension, all_tasks_test_data, supe
             raise ValueError('The value of "first_average" has to be string "first" or "average".')
 
 
-def evaluate_current_task(model, all_tasks_test_data, task_index, use_MLP, batch_size):
+def evaluate_current_task(model, all_tasks_test_data, task_index, use_MLP):
     """
     Evaluate results on the first task, using the current model.
 
     :param model: torch model instance
     :param all_tasks_test_data: list of all test dataloaders ([X_test, y_test, mask_test]) until the current task index
-    :param use_MLP: boolean - if True use MLP, else use Transformer
     :param task_index: index of the current task
-    :param batch_size: batch size
+    :param use_MLP: boolean - if True use MLP, else use Transformer
     :return: accuracy, AUROC, AUPRC
     """
     curr_test_loader = all_tasks_test_data[task_index]
@@ -170,9 +175,44 @@ def evaluate_current_task(model, all_tasks_test_data, task_index, use_MLP, batch
         return acc * 100, auroc * 100, auprc * 100
 
 
+def evaluate_current_task_PSP(model, all_tasks_test_data, task_index, use_MLP, contexts, layer_dimension):
+    """
+    Evaluate results on the first task, using the current PSP model.
+
+    :param model: torch model instance
+    :param all_tasks_test_data: list of all test dataloaders ([X_test, y_test, mask_test]) until the current task index
+    :param task_index: index of the current task
+    :param use_MLP: boolean - if True use MLP, else use Transformer
+    :param contexts: binary context vectors (shape=(num_tasks, num of model layers))
+    :param layer_dimension: list of 0 (first dimension taken for context size) and 1 (second dimension taken)
+    :return: accuracy, AUROC, AUPRC
+    """
+    curr_test_loader = all_tasks_test_data[task_index]
+    y = curr_test_loader.dataset.tensors[1].cuda()
+
+    model.eval()
+    with torch.no_grad():
+        test_outputs = []
+
+        for batch_X, batch_y, batch_mask in curr_test_loader:
+            if torch.cuda.is_available():
+                batch_X = batch_X.cuda()
+                batch_mask = batch_mask.cuda()
+
+            if use_MLP:
+                outputs = model.forward(batch_X, True, contexts, task_index)
+            else:
+                outputs = model.forward(batch_X, batch_mask, True, contexts, task_index)
+
+            test_outputs.append(outputs)
+
+        acc, auroc, auprc = get_stats(test_outputs, y)
+        return acc * 100, auroc * 100, auprc * 100
+
+
 def evaluate_tasks_average(model, all_tasks_test_data, contexts, layer_dimension, superposition, task_index, use_MLP, batch_size):
     """
-    Evaluate results on the first task, using the current model.
+    Evaluate average results until the current task, using the current model.
 
     :param model: torch model instance
     :param all_tasks_test_data: list of all test data [X_test, y_test, mask_test] until the current task index
@@ -188,7 +228,7 @@ def evaluate_tasks_average(model, all_tasks_test_data, contexts, layer_dimension
     if superposition:
         for task_i in range(task_index, -1, -1):  # iterate across tasks backwards
             # evaluate results on the current task
-            acc, auroc, auprc = evaluate_current_task(model, all_tasks_test_data, task_i, use_MLP, batch_size)
+            acc, auroc, auprc = evaluate_current_task(model, all_tasks_test_data, task_i, use_MLP)
             accs.append(acc)
             aurocs.append(auroc)
             auprcs.append(auprc)
@@ -202,14 +242,35 @@ def evaluate_tasks_average(model, all_tasks_test_data, contexts, layer_dimension
             context_multiplication(model, contexts, layer_dimension, task_i)
     else:
         for i in range(len(all_tasks_test_data)):
-            acc, auroc, auprc = evaluate_current_task(model, all_tasks_test_data, i, use_MLP, batch_size)
+            acc, auroc, auprc = evaluate_current_task(model, all_tasks_test_data, i, use_MLP)
             accs.append(acc)
             aurocs.append(auroc)
             auprcs.append(auprc)
     return np.mean(accs), np.mean(aurocs), np.mean(auprcs)
 
 
+def evaluate_tasks_average_PSP(model, all_tasks_test_data, contexts, layer_dimension, task_index, use_MLP):
+    """
+    Evaluate average results until the current task, using the current PSP model.
 
+    :param model: torch model instance
+    :param all_tasks_test_data: list of all test data [X_test, y_test, mask_test] until the current task index
+    :param contexts: binary context vectors (shape=(num_tasks, num of model layers))
+    :param layer_dimension: list of 0 (first dimension taken for context size) and 1 (second dimension taken)
+    :param task_index: index of the current task, which is being learned
+    :param use_MLP: boolean - if True use MLP, else use Transformer
+    :return: mean accuracy, mean AUROC, mean AUPRC (across tasks)
+    """
+    accs, aurocs, auprcs = [], [], []
+
+    for task_i in range(task_index, -1, -1):  # iterate across tasks backwards
+        # evaluate results on the current task
+        acc, auroc, auprc = evaluate_current_task_PSP(model, all_tasks_test_data, task_i, use_MLP, contexts, layer_dimension)
+        accs.append(acc)
+        aurocs.append(auroc)
+        auprcs.append(auprc)
+
+    return np.mean(accs), np.mean(aurocs), np.mean(auprcs)
 
 
 
