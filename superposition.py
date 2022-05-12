@@ -64,24 +64,30 @@ def context_multiplication(model, contexts, layer_dimension, task_index):
     :param task_index: index of the current task, which has finished learning
     :return: None (but model parameters are updated)
     """
+    # Ablation study (layers 0 - 5)
+    first_ablated_layer = -1    # -1 means no ablation
+    last_ablated_layer = -1     # -1 means no ablation
+    ablated_layers = list(range(first_ablated_layer, last_ablated_layer + 1))
+
     layer_index = 0
     for name, params in model.named_parameters():
         if name.endswith('weight'):  # only weight, not bias
-            with torch.no_grad():
-                if layer_dimension[layer_index] == 0:
-                    context_matrix = torch.from_numpy(np.diag(contexts[task_index][layer_index]).astype(np.float32)).cuda()
-                    new_params = torch.matmul(context_matrix, params)
-                elif layer_dimension[layer_index] == 1:
-                    context_matrix = torch.from_numpy(np.diag(contexts[task_index][layer_index]).astype(np.float32)).cuda()
-                    new_params = torch.matmul(params, context_matrix)
-                elif layer_dimension[layer_index] == 2:    # element-wise multiplication
-                    context_matrix = torch.from_numpy(np.reshape(contexts[task_index][layer_index],
-                                                                 newshape=(params.size()[0], params.size()[1])).astype(np.float32)).cuda()
-                    new_params = params * context_matrix
-                else:
-                    raise ValueError('Layer index must be 0, 1 or 2.')
+            if layer_index not in ablated_layers:   # if layer is not ablated
+                with torch.no_grad():
+                    if layer_dimension[layer_index] == 0:
+                        context_matrix = torch.from_numpy(np.diag(contexts[task_index][layer_index]).astype(np.float32)).cuda()
+                        new_params = torch.matmul(context_matrix, params)
+                    elif layer_dimension[layer_index] == 1:
+                        context_matrix = torch.from_numpy(np.diag(contexts[task_index][layer_index]).astype(np.float32)).cuda()
+                        new_params = torch.matmul(params, context_matrix)
+                    elif layer_dimension[layer_index] == 2:    # element-wise multiplication
+                        context_matrix = torch.from_numpy(np.reshape(contexts[task_index][layer_index],
+                                                                     newshape=(params.size()[0], params.size()[1])).astype(np.float32)).cuda()
+                        new_params = params * context_matrix
+                    else:
+                        raise ValueError('Layer index must be 0, 1 or 2.')
 
-                params.copy_(new_params)
+                    params.copy_(new_params)
 
             layer_index += 1
 
