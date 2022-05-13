@@ -70,11 +70,13 @@ if __name__ == '__main__':
 
     task_epochs_all = []
     times_per_run = []
+    times_per_task = np.zeros((num_runs, num_tasks))
 
     for r in range(num_runs):
         print('- - Run %d - -' % (r + 1))
 
         start_time = time.time()
+        previous_time = start_time
 
         all_tasks_test_data = []
         task_epochs = []
@@ -278,6 +280,10 @@ if __name__ == '__main__':
             auroc_arr[r, t] = test_auroc * 100
             auprc_arr[r, t] = test_auprc * 100
 
+            print('Elapsed time so far: %.2f s, %.2f min' % (time.time() - start_time, (time.time() - start_time) / 60))
+            times_per_task[r, t] = time.time() - previous_time  # saved in seconds
+            previous_time = time.time()
+
         task_epochs_all.append(task_epochs)
 
         end_time = time.time()
@@ -297,6 +303,17 @@ if __name__ == '__main__':
     mean_acc, std_acc = np.mean(acc_arr, axis=0), np.std(acc_arr, axis=0)
     mean_auroc, std_auroc = np.mean(auroc_arr, axis=0), np.std(auroc_arr, axis=0)
     mean_auprc, std_auprc = np.mean(auprc_arr, axis=0), np.std(auprc_arr, axis=0)
+
+    mean_time_per_task, std_time_per_task = np.mean(times_per_task, axis=0), np.std(times_per_task, axis=0)
+
+    print('\nMeans for each task separately:')
+    for t in range(num_tasks):
+        print('------------------------------------------')
+        print('Mean time for task %d: %.2f +/- %.2f s,  %.2f +/- %.2f min' % (t + 1, mean_time_per_task[t], std_time_per_task[t], mean_time_per_task[t] / 60, std_time_per_task[t] / 60))
+        print('Mean time until task %d: %.2f s,  %.2f min' % (t + 1, sum(mean_time_per_task[:t + 1]), sum(mean_time_per_task[:t + 1]) / 60))
+        print('Task %d - Accuracy = %.1f +/- %.1f' % (t + 1, mean_acc[t], std_acc[t]))
+        print('Task %d - AUROC    = %.1f +/- %.1f' % (t + 1, mean_auroc[t], std_auroc[t]))
+        print('Task %d - AUPRC    = %.1f +/- %.1f' % (t + 1, mean_auprc[t], std_auprc[t]))
 
     '''
     for t in range(num_tasks):
@@ -386,7 +403,7 @@ if __name__ == '__main__':
         end_performance[i]['std_auprc'] = std_auprc[index]
 
     metrics = ['acc', 'auroc', 'auprc']    # possibilities: 'acc', 'auroc', 'auprc'
-    print('Metrics at the end of each task training:\n', end_performance)
+    print('\n\nMetrics at the end of each task training:\n', end_performance)
     plot_multiple_histograms(end_performance, num_tasks, metrics,
                              '#runs: %d, %s task results, %s model, %s' % (num_runs, first_average, method,
                              'ES on %s' % stopping_criteria if do_early_stopping else 'no ES'),

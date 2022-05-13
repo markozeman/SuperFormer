@@ -31,13 +31,13 @@ if __name__ == '__main__':
     dim_feedforward = 1024
     num_classes = 2
     standardize_input = False
-    element_wise = True     # if True, parameters in self attention are superimposed element-wise
+    element_wise = True     # if True, parameters in multi-head attention are superimposed element-wise
     restore_best_auroc = False
     do_early_stopping = True
     stopping_criteria = 'auroc'  # possibilities: 'acc', 'auroc', 'auprc'
 
     batch_size = 128
-    num_runs = 1
+    num_runs = 5
     num_tasks = 6
     num_epochs = 50
     learning_rate = 0.001
@@ -111,12 +111,14 @@ if __name__ == '__main__':
 
     task_epochs_all = []
     times_per_run = []
+    times_per_task = np.zeros((num_runs, num_tasks))
 
     for r in range(num_runs):
         print('- - Run %d - -' % (r + 1))
 
         # np.random.seed(seed)
         start_time = time.time()
+        previous_time = start_time
 
         if use_MLP:
             model = MLP(input_size, num_classes, use_PSP).to(device)
@@ -310,6 +312,10 @@ if __name__ == '__main__':
                 if t < num_tasks - 1:   # do not multiply with contexts at the end of last task
                     context_multiplication(model, contexts, layer_dimension, t)
 
+            print('Elapsed time so far: %.2f s, %.2f min' % (time.time() - start_time, (time.time() - start_time) / 60))
+            times_per_task[r, t] = time.time() - previous_time  # saved in seconds
+            previous_time = time.time()
+
         task_epochs_all.append(task_epochs)
 
         end_time = time.time()
@@ -331,6 +337,8 @@ if __name__ == '__main__':
     mean_auroc, std_auroc = np.mean(auroc_arr, axis=0), np.std(auroc_arr, axis=0)
     mean_auprc, std_auprc = np.mean(auprc_arr, axis=0), np.std(auprc_arr, axis=0)
 
+    mean_time_per_task, std_time_per_task = np.mean(times_per_task, axis=0), np.std(times_per_task, axis=0)
+
     '''
     # majority classifier
     run_mean_acc = np.mean(acc_arr, axis=1)
@@ -340,36 +348,14 @@ if __name__ == '__main__':
           % (np.mean(run_mean_acc), np.std(run_mean_acc), np.mean(run_mean_auroc), np.std(run_mean_auroc), np.mean(run_mean_auprc), np.std(run_mean_auprc)))
     '''
 
-    '''
+    print('\nMeans for each task separately:')
     for t in range(num_tasks):
-        if t == 0:
-            # s = 'Hate speech'
-            s = permutations[permutation_index][0]
-        elif t == 1:
-            # s = 'IMDB sentiment analysis'
-            s = permutations[permutation_index][1]
-        elif t == 2:
-            # s = 'SMS spam'
-            s = permutations[permutation_index][2]
-        elif t == 3:
-            s = 'Amazon, Yelp sentiment analysis'
-        elif t == 4:
-            s = 'Clickbait'
-        elif t == 5:
-            s = 'Humor detection'
-
-        if s == 'HS':
-            s = 'Hate speech'
-        elif s == 'SA':
-            s = 'IMDB sentiment analysis'
-        elif s == 'S':
-            s = 'SMS spam'
-
         print('------------------------------------------')
-        print('%s - Accuracy = %.1f +/- %.1f' % (s, mean_acc[t], std_acc[t]))
-        print('%s - AUROC    = %.1f +/- %.1f' % (s, mean_auroc[t], std_auroc[t]))
-        print('%s - AUPRC    = %.1f +/- %.1f' % (s, mean_auprc[t], std_auprc[t]))
-    '''
+        print('Mean time for task %d: %.2f +/- %.2f s,  %.2f +/- %.2f min' % (t+1, mean_time_per_task[t], std_time_per_task[t], mean_time_per_task[t] / 60, std_time_per_task[t] / 60))
+        print('Mean time until task %d: %.2f s,  %.2f min' % (t+1, sum(mean_time_per_task[:t+1]), sum(mean_time_per_task[:t+1]) / 60))
+        print('Task %d - Accuracy = %.1f +/- %.1f' % (t+1, mean_acc[t], std_acc[t]))
+        print('Task %d - AUROC    = %.1f +/- %.1f' % (t+1, mean_auroc[t], std_auroc[t]))
+        print('Task %d - AUPRC    = %.1f +/- %.1f' % (t+1, mean_auprc[t], std_auprc[t]))
 
     show_only_accuracy = False
     min_y = 50
@@ -448,7 +434,7 @@ if __name__ == '__main__':
         end_performance[i]['std_auprc'] = std_auprc[index]
 
     metrics = ['acc', 'auroc', 'auprc']    # possibilities: 'acc', 'auroc', 'auprc'
-    print('Metrics at the end of each task training:\n', end_performance)
+    print('\n\nMetrics at the end of each task training:\n', end_performance)
     plot_multiple_histograms(end_performance, num_tasks, metrics,
                              '#runs: %d, %s task results, %s model, %s, el.-wise=%s, %s' % (num_runs, first_average,
                              'MLP' if use_MLP else 'Transformer', 'superposition' if superposition else 'no superposition',
