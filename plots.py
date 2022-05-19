@@ -128,4 +128,68 @@ def plot_multiple_results(num_tasks, num_epochs, first_average, means, stds, leg
     plt.show()
 
 
+def plot_task_results(data, method_names, markers, colors, x_ticks, x_label, y_label):
+    """
+    Plot results for different methods.
+
+    :param data: 2D list of results with the shape (num_methods, num_tasks)
+    :param method_names: list of methods' names (len=num_methods)
+    :param markers: list of point markers (len=num_methods)
+    :param colors: list of colors (len=num_methods)
+    :param x_ticks: list of strings to show at x axis (len=num_tasks)
+    :param x_label: label of axis x (string)
+    :param y_label: label of axis y (string)
+    :return: None
+    """
+    font = {'size': 25}
+    plt.rc('font', **font)
+    plt.grid(axis='y')
+
+    # plt.yticks([75, 80, 85, 90, 95])
+
+    x = list(range(1, 7))
+
+    for i, method_res in enumerate(data):
+        plt.plot(x, method_res, label=method_names[i], linestyle='--', color=colors[i], marker=markers[i],
+                 linewidth=2, markersize=12)
+
+    plt.xticks(x, x_ticks)
+    plt.xlabel(x_label)
+    plt.ylabel(y_label)
+    plt.legend()
+    plt.show()
+
+
+def plot_heatmap(data, full_value):
+    """
+    Plot heatmap for the ablation study.
+
+    :param data: 2D list of shape (num_layers, num_layers)
+    :param full_value: value of the result without ablation
+    :return: None
+    """
+    import seaborn as sns
+    import numpy as np
+
+    font = {'size': 25}
+    plt.rc('font', **font)
+
+    data = np.array(data)
+    data[data == 0] = full_value
+
+    relative_diff = (-1 + (data / full_value)) * 100
+
+    ax = sns.heatmap(relative_diff, cmap=sns.color_palette("Blues_r", as_cmap=True), linecolor='black', linewidth=1, square=True)
+
+    for i in range(len(data)):
+        for j in range(len(data[i])):
+            if relative_diff[i, j] < 0:   # upper triangle
+                text = ax.text(j + 0.5, i + 0.5, round(relative_diff[i, j], 1), ha="center", va="center", color="black")
+
+    ax.set_xticklabels(list(range(1, 7)))
+    ax.set_yticklabels(list(range(1, 7)))
+
+    plt.xlabel('last ablated layer')
+    plt.ylabel('first ablated layer')
+    plt.show()
 
