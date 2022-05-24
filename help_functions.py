@@ -4,6 +4,7 @@ from sklearn.metrics import roc_auc_score, classification_report, confusion_matr
 from sklearn.metrics import average_precision_score
 
 
+'''
 def load_data(dataset):
     """
     Load ELMo embeddings for 'dataset'.
@@ -16,6 +17,7 @@ def load_data(dataset):
     X_test = np.load('ELMo_embeddings/%s/X_test_all.npy' % dataset, allow_pickle=True)
     y_test = np.load('ELMo_embeddings/%s/test_labels.npy' % dataset, allow_pickle=True)
     return X_train, y_train, X_test, y_test
+'''
 
 
 def count_trainable_parameters(model):
