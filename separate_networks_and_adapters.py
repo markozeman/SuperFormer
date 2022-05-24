@@ -22,20 +22,20 @@ if __name__ == '__main__':
     use_mask = False
 
     # method options: 'adapters', 'upper bound' (use separate transformer networks for each task), 'lower bound' (use single transformer network for all tasks)
-    method = 'upper bound'
+    method = 'adapters'
     input_size = 32
     num_heads = 4
     num_layers = 1      # number of transformer encoder layers
     dim_feedforward = 1024
     num_classes = 2
-    bottleneck_size = 16    # only used with adapters
+    bottleneck_size = 4    # only used with adapters
     standardize_input = False
     restore_best_auroc = False
     do_early_stopping = True
     stopping_criteria = 'auroc'  # possibilities: 'acc', 'auroc', 'auprc'
 
     batch_size = 128
-    num_runs = 2
+    num_runs = 5
     num_tasks = 6
     num_epochs = 500 if method == 'adapters' else 50
     learning_rate = 0.001

@@ -53,6 +53,11 @@ def create_context_vectors(model, num_tasks, element_wise, use_PSP=False):
                 binary_context_vector = random_binary_array(vector_size)
                 task_contexts.append(binary_context_vector)
         context_vectors.append(task_contexts)
+
+    # # Ablate a single W inside a multi-head attention layer
+    # for con_vec in context_vectors:
+    #     con_vec[0][1024:2048] = np.ones(1024)
+
     return context_vectors, layer_dimension
 
 

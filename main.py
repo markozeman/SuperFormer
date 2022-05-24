@@ -24,7 +24,7 @@ if __name__ == '__main__':
 
     use_MLP = False      # if True use MLP, else use Transformer
     use_mask = False     # if True use masking in Transformer, else do not use masks
-    use_PSP = True
+    use_PSP = False
     input_size = 32
     num_heads = 4
     num_layers = 1      # number of transformer encoder layers
