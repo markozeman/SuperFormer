@@ -21,6 +21,12 @@ def load_data(dataset):
 
 
 def count_trainable_parameters(model):
+    """
+    Count the number of trainable model parameters.
+
+    :param model: torch model instance
+    :return: the number of trainable model parameters
+    """
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 
