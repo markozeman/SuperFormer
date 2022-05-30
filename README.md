@@ -7,7 +7,7 @@ This repository contains implementation code for a novel continual learning meth
 We compare the method against several prominent continual learning methods, i.e., EWC, SI, MAS, GEM, PSP, etc. on a set of
 text classification tasks and achieve favorable results in terms of performance, memory, and speed.
 
-## Key idea of SuperFormer
+## Key idea of *SuperFormer*
 
 The main idea of this method is to train different tasks consecutively in a single network using the stochastic gradient descent algorithm.
 In between the tasks we use *contexts*, which serve as a model forgetting mitigation mechanism, 
@@ -19,6 +19,10 @@ since they allow for training tasks in nearly orthogonal subspaces.
     <img src="images/SF_learning.png" width="600" align="center">
 </p>
 
+When learning of a number of tasks is over, the learned tasks co-exist in
+a single transformer network. If *T* tasks were trained, we are able to retrieve
+the network’s weights of all previous tasks by accepting a small degradation of
+the performance caused by the model forgetting, when learning later tasks.
 *Contexts* are utilized to switch between different tasks 
 and at the inference time they serve to obtain the suitable network weights for a specific task.
 
@@ -40,15 +44,17 @@ for this repository running the following command (from the root project directo
 pip install -r requirements.txt
 ```
 
+All datasets are preprocessed with *Word2Vec* method, the code to run preprocessing is in *main.py*.
+
 
 ## Running the code
 
 We provide ready-to-run code for our *SuperFormer* model and the following methods of comparison: 
-Upper bound, Lower bound, EWC, Online EWC, SI, MAS, GEM, PSP, and Adapters. 
+Upper bound, Lower bound, EWC, Online EWC, SI, MAS, GEM, PSP, and Adapters. <br />
 EWC, Online EWC, SI, MAS, GEM methods are adapted from:
 Hsu, Y.C., Liu, Y.C., Ramasamy, A., Kira, Z., 2018. Re-evaluating continual
 learning scenarios: A categorization and case for strong baselines, in:
-NeurIPS Continual learning Workshop.
+NeurIPS Continual learning Workshop. <br />
 Starting from the root directory, you can run models as follows:
 
 - *SuperFormer*
@@ -119,4 +125,4 @@ Please send any questions you might have about the code or the algorithm to <mar
 
 ## License
 
-*SuperFormer is* is licensed under the MIT License.
+*SuperFormer* is licensed under the MIT License.

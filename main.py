@@ -49,6 +49,7 @@ if __name__ == '__main__':
                   ['HD', 'SA_2', 'SA', 'C', 'S', 'HS'],
                   ['SA', 'HS', 'C', 'SA_2', 'HD', 'S']]
 
+    ### Preprocess data for all six task with Word2Vec
     # # save X, y, mask for all 6 datasets
     # X, y, mask = preprocess_hate_speech('datasets/hate_speech.csv')
     # torch.save(X, 'Word2Vec_embeddings/X_hate_speech.pt')
