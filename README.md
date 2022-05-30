@@ -119,4 +119,4 @@ Please send any questions you might have about the code or the algorithm to <mar
 
 ## License
 
-Raindrop is licensed under the MIT License.
+*SuperFormer is* is licensed under the MIT License.
