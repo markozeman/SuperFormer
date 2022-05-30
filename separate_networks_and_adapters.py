@@ -1,4 +1,5 @@
 import time
+import argparse
 from models import *
 from superposition import *
 from prepare_data import *
@@ -8,6 +9,11 @@ from torch.utils.data import TensorDataset
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--method', type=str, default='Upper_bound', choices=['Upper_bound', 'Lower_bound', 'Adapters'])
+    parser.add_argument('--num_runs', type=int, default=5)
+    args, _ = parser.parse_known_args()
+
     adapter_trainable_layers = ["transformer_encoder.layers.0.layer_norm_trainable.weight",
                                 "transformer_encoder.layers.0.layer_norm_trainable.bias",
                                 "transformer_encoder.layers.0.adapter_layer.bottleneck_mlp.0.weight",
@@ -22,7 +28,13 @@ if __name__ == '__main__':
     use_mask = False
 
     # method options: 'adapters', 'upper bound' (use separate transformer networks for each task), 'lower bound' (use single transformer network for all tasks)
-    method = 'adapters'
+    if args.method == 'Upper_bound':
+        method = 'upper bound'
+    elif args.method == 'Lower_bound':
+        method = 'lower bound'
+    elif args.method == 'Adapters':
+        method = 'adapters'
+
     input_size = 32
     num_heads = 4
     num_layers = 1      # number of transformer encoder layers
@@ -35,20 +47,10 @@ if __name__ == '__main__':
     stopping_criteria = 'auroc'  # possibilities: 'acc', 'auroc', 'auprc'
 
     batch_size = 128
-    num_runs = 5
+    num_runs = args.num_runs
     num_tasks = 6
     num_epochs = 500 if method == 'adapters' else 50
     learning_rate = 0.001
-
-    # # Permutations are only available for the first 3 tasks
-    # permutations = [['HS', 'SA', 'S'],
-    #                 ['HS', 'S', 'SA'],
-    #                 ['SA', 'HS', 'S'],
-    #                 ['SA', 'S', 'HS'],
-    #                 ['S', 'HS', 'SA'],
-    #                 ['S', 'SA', 'HS']]
-    # permutation_index = 0
-    # task_names = permutations[permutation_index] + ['SA_2', 'C', 'HD']
 
     task_names = [['HS', 'SA', 'S', 'SA_2', 'C', 'HD'],
                   ['C', 'HD', 'SA', 'HS', 'SA_2', 'S'],

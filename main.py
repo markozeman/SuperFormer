@@ -2,6 +2,7 @@ import time
 import torch
 import random
 import numpy as np
+import argparse
 from help_functions import *
 from models import *
 from superposition import *
@@ -11,20 +12,20 @@ from sklearn.metrics import roc_auc_score, classification_report, confusion_matr
 from sklearn.preprocessing import StandardScaler
 from torch.utils.data import TensorDataset
 
-# seed = 50
-# torch.manual_seed(seed)
-# random.seed(seed)
-# np.random.seed(seed)
-
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--method', type=str, default='SuperFormer', choices=['SuperFormer', 'PSP'])
+    parser.add_argument('--num_runs', type=int, default=5)
+    args, _ = parser.parse_known_args()
+
     superposition = True
     superposition_each_epoch = False
     first_average = 'average'     # show results on 'first' task or the 'average' results until current task
 
     use_MLP = False      # if True use MLP, else use Transformer
     use_mask = False     # if True use masking in Transformer, else do not use masks
-    use_PSP = False
+    use_PSP = True if args.method == 'PSP' else False
     input_size = 32
     num_heads = 4
     num_layers = 1      # number of transformer encoder layers
@@ -37,20 +38,10 @@ if __name__ == '__main__':
     stopping_criteria = 'auroc'  # possibilities: 'acc', 'auroc', 'auprc'
 
     batch_size = 128
-    num_runs = 5
+    num_runs = args.num_runs
     num_tasks = 6
     num_epochs = 50
     learning_rate = 0.001
-
-    # # Permutations are only available for the first 3 tasks
-    # permutations = [['HS', 'SA', 'S'],
-    #                 ['HS', 'S', 'SA'],
-    #                 ['SA', 'HS', 'S'],
-    #                 ['SA', 'S', 'HS'],
-    #                 ['S', 'HS', 'SA'],
-    #                 ['S', 'SA', 'HS']]
-    # permutation_index = 0
-    # task_names = permutations[permutation_index] + ['SA_2', 'C', 'HD']
 
     task_names = [['HS', 'SA', 'S', 'SA_2', 'C', 'HD'],
                   ['C', 'HD', 'SA', 'HS', 'SA_2', 'S'],
@@ -89,13 +80,6 @@ if __name__ == '__main__':
     # torch.save(X, 'Word2Vec_embeddings/X_humor_detection.pt')
     # torch.save(y, 'Word2Vec_embeddings/y_humor_detection.pt')
     # torch.save(mask, 'Word2Vec_embeddings/mask_humor_detection.pt')
-
-    # model = Transformer(input_size, num_heads, num_layers, dim_feedforward, num_classes).cuda()
-    # x = model(X[:64].cuda(), mask[:64].cuda())
-    #
-    # print(model)
-    # summary(model, [(batch_size, 256, 32), (batch_size, 256)])
-    # print('Number of trainable parameters: ', count_trainable_parameters(model))
 
     # Train model for 'num_runs' runs for 'num_tasks' tasks
     acc_arr = np.zeros((num_runs, num_tasks))

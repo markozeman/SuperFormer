@@ -187,6 +187,8 @@ def get_args(argv):
     parser.add_argument('--repeat', type=int, default=1, help="Repeat the experiment N times")
     parser.add_argument('--incremental_class', dest='incremental_class', default=False, action='store_true',
                         help="The number of output node in the single-headed model increases along with new categories.")
+    parser.add_argument('--method', type=str, default='EWC', choices=['EWC', 'Online_EWC', 'SI', 'MAS', 'GEM_Large', 'GEM_Small'])
+    parser.add_argument('--num_runs', type=int, default=5)
     args = parser.parse_args(argv)
     return args
 
@@ -197,8 +199,17 @@ if __name__ == '__main__':
     avg_final_acc = {}
     do_early_stopping = True
     stopping_criteria = 'auroc'  # possibilities: 'acc', 'auroc', 'auprc'
-    args.repeat = 1   # number of runs
-    args.agent_name = 'MAS'   # continual learning method; options: ['EWC_mnist', 'EWC_online_mnist', 'SI', 'MAS', 'GEM_x']
+    args.repeat = args.num_runs   # number of runs
+
+    if args.method == 'EWC':
+        args.method = 'EWC_mnist'
+    elif args.method == 'Online_EWC':
+        args.method = 'EWC_online_mnist'
+    elif args.method == 'GEM_Large':
+        args.method = 'GEM_300'
+    elif args.method == 'GEM_Small':
+        args.method = 'GEM_30'
+    args.agent_name = args.method   # continual learning method; options: ['EWC_mnist', 'EWC_online_mnist', 'SI', 'MAS', 'GEM_x']
 
     args.force_out_dim = 2  # number of output neurons / number of classes
     args.model_name = 'myTransformer'  # to use Transformer model
